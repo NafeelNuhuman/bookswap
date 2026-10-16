@@ -61,6 +61,12 @@ public class AuthService {
         return issueTokens(user.get().getId());
     }
 
+    @Transactional(noRollbackFor = InvalidRefreshTokenException.class)
+    public TokenResponse refresh(String rawRefreshToken) {
+        UUID userId = refreshTokens.consume(rawRefreshToken);
+        return issueTokens(userId);
+    }
+
     private TokenResponse issueTokens(UUID userId) {
         return new TokenResponse(jwtService.createAccessToken(userId), refreshTokens.issue(userId),
                 "Bearer", jwtService.accessTtlSeconds());
