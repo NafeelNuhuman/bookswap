@@ -26,6 +26,11 @@ public class UserService {
         return ProfileResponse.from(load(principalId));
     }
 
+    @Transactional(readOnly = true)
+    public boolean isProfileComplete(UUID principalId) {
+        return load(principalId).isProfileComplete();
+    }
+
     @Transactional
     public ProfileResponse updateProfile(UUID principalId, UpdateProfileRequest request) {
         User user = load(principalId);

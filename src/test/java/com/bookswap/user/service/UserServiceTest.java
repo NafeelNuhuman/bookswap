@@ -60,4 +60,20 @@ class UserServiceTest {
         when(users.findById(id)).thenReturn(Optional.empty());
         assertThatThrownBy(() -> service().getProfile(id)).isInstanceOf(UserNotFoundException.class);
     }
+
+    @Test
+    void isProfileCompleteReflectsTheStoredProfile() {
+        User user = new User("a@example.com", "hash", clock.instant());
+        when(users.findById(user.getId())).thenReturn(Optional.of(user));
+        assertThat(service().isProfileComplete(user.getId())).isFalse();
+        user.updateProfile("Pat", "Berlin", "10115", clock.instant());
+        assertThat(service().isProfileComplete(user.getId())).isTrue();
+    }
+
+    @Test
+    void isProfileCompleteOfUnknownUserIsNotFound() {
+        UUID id = UUID.randomUUID();
+        when(users.findById(id)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> service().isProfileComplete(id)).isInstanceOf(UserNotFoundException.class);
+    }
 }
