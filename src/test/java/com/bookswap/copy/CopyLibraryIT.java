@@ -181,6 +181,16 @@ class CopyLibraryIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void hugePageNumbersDoNotOverflowTheOffsetIntoA500() throws Exception {
+        JsonNode tokens = registerAndLogin("huge@example.com", "password123");
+        send(get("/api/copies").param("page", String.valueOf(Integer.MAX_VALUE)), tokens)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(0));
+        send(get("/api/copies").param("page", "21474837").param("size", "100"), tokens)
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void gradeCanBeEditedAndCopyViewedAndRemoved() throws Exception {
         JsonNode tokens = registerAndLogin("edit@example.com", "password123");
         catalog.put(FOX, FOX_DETAILS);

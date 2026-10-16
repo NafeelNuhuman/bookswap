@@ -52,7 +52,10 @@ public class CopyService {
 
     @Transactional(readOnly = true)
     public PageResponse<CopyResponse> list(UUID ownerId, CopyStatus status, int page, int size) {
-        Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), MAX_PAGE_SIZE),
+        int pageSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+        // Spring Data computes the offset as page * size and rejects it above Integer.MAX_VALUE (a 500 otherwise).
+        int pageNumber = Math.min(Math.max(page, 0), Integer.MAX_VALUE / pageSize);
+        Pageable pageable = PageRequest.of(pageNumber, pageSize,
                 Sort.by(Sort.Order.desc("createdAt"), Sort.Order.asc("id")));
         Page<Copy> result = status == null
                 ? copies.findByOwnerId(ownerId, pageable)
