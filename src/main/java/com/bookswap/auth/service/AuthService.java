@@ -1,6 +1,8 @@
 package com.bookswap.auth.service;
 
+import com.bookswap.auth.web.LoginRequest;
 import com.bookswap.auth.web.RegisterRequest;
+import com.bookswap.auth.web.TokenResponse;
 import com.bookswap.user.domain.User;
 import com.bookswap.user.repository.UserRepository;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -10,17 +12,27 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.util.Locale;
+import java.util.Optional;
+import java.util.UUID;
 
 @Service
 public class AuthService {
     private final UserRepository users;
     private final PasswordEncoder passwordEncoder;
+    private final RefreshTokenService refreshTokens;
+    private final JwtService jwtService;
     private final Clock clock;
+    /** Compared against when the email is unknown, so timing does not reveal whether it exists. */
+    private final String dummyHash;
 
-    public AuthService(UserRepository users, PasswordEncoder passwordEncoder, Clock clock) {
+    public AuthService(UserRepository users, PasswordEncoder passwordEncoder, RefreshTokenService refreshTokens,
+                       JwtService jwtService, Clock clock) {
         this.users = users;
         this.passwordEncoder = passwordEncoder;
+        this.refreshTokens = refreshTokens;
+        this.jwtService = jwtService;
         this.clock = clock;
+        this.dummyHash = passwordEncoder.encode("dummy-password-for-timing");
     }
 
     @Transactional
@@ -36,6 +48,22 @@ public class AuthService {
             // Lost a race with a concurrent registration; the unique index on lower(email) decided.
             throw new EmailTakenException();
         }
+    }
+
+    @Transactional
+    public TokenResponse login(LoginRequest request) {
+        Optional<User> user = users.findByEmail(normalizeEmail(request.email()));
+        String hash = user.map(User::getPasswordHash).orElse(dummyHash);
+        boolean matches = passwordEncoder.matches(request.password(), hash);
+        if (user.isEmpty() || !matches) {
+            throw new InvalidCredentialsException();
+        }
+        return issueTokens(user.get().getId());
+    }
+
+    private TokenResponse issueTokens(UUID userId) {
+        return new TokenResponse(jwtService.createAccessToken(userId), refreshTokens.issue(userId),
+                "Bearer", jwtService.accessTtlSeconds());
     }
 
     static String normalizeEmail(String email) {

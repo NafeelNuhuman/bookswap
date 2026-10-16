@@ -20,4 +20,9 @@ public class AuthController {
     public ProfileResponse register(@Valid @RequestBody RegisterRequest request) {
         return ProfileResponse.from(authService.register(request));
     }
+
+    @PostMapping("/login")
+    public TokenResponse login(@Valid @RequestBody LoginRequest request) {
+        return authService.login(request);
+    }
 }
