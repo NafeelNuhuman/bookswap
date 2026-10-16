@@ -20,3 +20,7 @@ bookswap:
     refresh-ttl: 14d
   security:
     bcrypt-strength: 12
+  catalog:
+    base-url: ${CATALOG_BASE_URL:https://openlibrary.org}
+    connect-timeout: 2s
+    read-timeout: 3s
