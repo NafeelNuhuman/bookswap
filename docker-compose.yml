@@ -15,5 +15,19 @@ services:
       timeout: 3s
       retries: 10
 
+  app:
+    build: .
+    profiles: ["app"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/bookswap
+      DB_USER: bookswap
+      DB_PASSWORD: bookswap
+      JWT_SECRET: ${JWT_SECRET:-dev-only-secret-change-me-32-bytes-minimum!!}
+    ports:
+      - "8080:8080"
+
 volumes:
   bookswap-data:
