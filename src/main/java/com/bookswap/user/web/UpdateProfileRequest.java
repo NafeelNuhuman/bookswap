@@ -11,8 +11,8 @@ public record UpdateProfileRequest(
         @NotBlank @Size(max = 20) @Pattern(regexp = "[^\\x00]*", message = "must not contain NUL characters") String postalCode) {
 
     public UpdateProfileRequest {
-        displayName = displayName == null ? null : displayName.trim();
-        city = city == null ? null : city.trim();
-        postalCode = postalCode == null ? null : postalCode.trim();
+        displayName = displayName == null ? null : displayName.strip();
+        city = city == null ? null : city.strip();
+        postalCode = postalCode == null ? null : postalCode.strip();
     }
 }

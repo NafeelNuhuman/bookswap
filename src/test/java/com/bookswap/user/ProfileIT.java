@@ -91,6 +91,15 @@ class ProfileIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void unicodeWhitespaceOnlyFieldsAreRejectedNotSavedAsIncomplete() throws Exception {
+        JsonNode tokens = registerAndLogin("em@example.com", "password123");
+        // U+2003 EM SPACE: String.isBlank() treats it as blank, trim() does not.
+        putMe(tokens, Map.of("displayName", " ", "city", "Berlin", "postalCode", "10115"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fieldErrors[?(@.field=='displayName')]").exists());
+    }
+
+    @Test
     void validTokenOfADeletedUserIsAClean404() throws Exception {
         JsonNode tokens = registerAndLogin("gone@example.com", "password123");
         jdbc.update("delete from users where email = 'gone@example.com'");
