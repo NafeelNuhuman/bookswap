@@ -1,0 +1,19 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: bookswap
+      POSTGRES_USER: bookswap
+      POSTGRES_PASSWORD: bookswap
+    ports:
+      - "5432:5432"
+    volumes:
+      - bookswap-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bookswap -d bookswap"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  bookswap-data:

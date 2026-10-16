@@ -1,0 +1,22 @@
+spring:
+  application:
+    name: bookswap
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/bookswap}
+    username: ${DB_USER:bookswap}
+    password: ${DB_PASSWORD:bookswap}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+
+bookswap:
+  jwt:
+    # DEV DEFAULT ONLY. Override JWT_SECRET (>= 32 bytes) in any real deployment.
+    secret: ${JWT_SECRET:dev-only-secret-change-me-32-bytes-minimum!!}
+    access-ttl: 15m
+    refresh-ttl: 14d
+  security:
+    bcrypt-strength: 12
