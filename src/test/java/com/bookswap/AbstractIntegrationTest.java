@@ -1,11 +1,14 @@
 package com.bookswap;
 
+import com.bookswap.support.StubBookCatalog;
+import com.bookswap.support.StubCatalogConfig;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -17,10 +20,14 @@ import java.util.Map;
 
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest(properties = "bookswap.security.bcrypt-strength=4")
+@SpringBootTest(properties = {
+        "bookswap.security.bcrypt-strength=4",
+        "spring.jpa.properties.hibernate.generate_statistics=true"})
 @AutoConfigureMockMvc
+@Import(StubCatalogConfig.class)
 public abstract class AbstractIntegrationTest {
 
     // Singleton container shared by every test class in the JVM (one Spring context, one DB).
@@ -40,10 +47,12 @@ public abstract class AbstractIntegrationTest {
     @Autowired protected MockMvc mvc;
     @Autowired protected ObjectMapper objectMapper;
     @Autowired protected JdbcTemplate jdbc;
+    @Autowired protected StubBookCatalog catalog;
 
     @BeforeEach
     void cleanDatabase() {
-        jdbc.execute("TRUNCATE refresh_token, users CASCADE");
+        jdbc.execute("TRUNCATE copy, book, refresh_token, users CASCADE");
+        catalog.reset();
     }
 
     protected ResultActions postJson(String url, Object body) throws Exception {
@@ -60,6 +69,13 @@ public abstract class AbstractIntegrationTest {
                 .andExpect(status().isCreated());
         return read(postJson("/api/auth/login", Map.of("email", email, "password", password))
                 .andExpect(status().isOk()));
+    }
+
+    protected void completeProfile(JsonNode tokens) throws Exception {
+        mvc.perform(put("/api/users/me").header("Authorization", bearer(tokens))
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"displayName\":\"Pat\",\"city\":\"Berlin\",\"postalCode\":\"10115\"}"))
+                .andExpect(status().isOk());
     }
 
     protected String bearer(JsonNode tokens) {
