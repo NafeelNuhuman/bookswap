@@ -20,7 +20,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 class OpenLibraryCatalogTest {
-    private static final String URL = "https://ol.test/api/books?bibkeys=ISBN:9780140328721&format=json&jscmdata=data";
+    private static final String URL = "https://ol.test/api/books?bibkeys=ISBN:9780140328721&format=json&jscmd=data";
     private static final Isbn ISBN = Isbn.parse("9780140328721");
 
     private MockRestServiceServer server;

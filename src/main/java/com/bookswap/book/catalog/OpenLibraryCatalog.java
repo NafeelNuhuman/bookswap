@@ -28,7 +28,7 @@ public class OpenLibraryCatalog implements BookCatalog {
         try {
             // Only the normalized, digits-only ISBN is ever placed in the URL.
             body = client.get()
-                    .uri("/api/books?bibkeys=ISBN:{isbn}&format=json&jscmdata=data", isbn.value())
+                    .uri("/api/books?bibkeys=ISBN:{isbn}&format=json&jscmd=data", isbn.value())
                     .retrieve()
                     .body(JsonNode.class);
         } catch (RestClientException e) {
