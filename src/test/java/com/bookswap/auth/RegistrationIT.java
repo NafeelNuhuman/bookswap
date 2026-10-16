@@ -54,6 +54,22 @@ class RegistrationIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void nonAsciiPasswordOverBcryptByteLimitIsRejectedNotSilentlyTruncated() throws Exception {
+        // 72 characters but 108 UTF-8 bytes: BCrypt would ignore the tail, so two passwords would match.
+        postJson("/api/auth/register", Map.of("email", "utf@example.com", "password", "é".repeat(36) + "A".repeat(36)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fieldErrors[?(@.field=='password')]").exists());
+        assertThat(jdbc.queryForObject("select count(*) from users", Integer.class)).isZero();
+    }
+
+    @Test
+    void nonAsciiPasswordWithinTheByteLimitIsAccepted() throws Exception {
+        // 36 two-byte characters = exactly 72 bytes
+        postJson("/api/auth/register", Map.of("email", "ok@example.com", "password", "é".repeat(36)))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
     void missingFieldsGivePerFieldErrors() throws Exception {
         postJson("/api/auth/register", Map.of())
                 .andExpect(status().isBadRequest())

@@ -79,6 +79,18 @@ class ProfileIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void nulCharacterInProfileFieldsIsA400NotA500() throws Exception {
+        JsonNode tokens = registerAndLogin("nul@example.com", "password123");
+        putMe(tokens, Map.of("displayName", "a\u0000b", "city", "Berlin", "postalCode", "10115"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fieldErrors[?(@.field=='displayName')]").exists());
+        putMe(tokens, Map.of("displayName", "Nul", "city", "Ber\u0000lin", "postalCode", "10\u0000115"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fieldErrors[?(@.field=='city')]").exists())
+                .andExpect(jsonPath("$.fieldErrors[?(@.field=='postalCode')]").exists());
+    }
+
+    @Test
     void validTokenOfADeletedUserIsAClean404() throws Exception {
         JsonNode tokens = registerAndLogin("gone@example.com", "password123");
         jdbc.update("delete from users where email = 'gone@example.com'");

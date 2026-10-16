@@ -51,6 +51,20 @@ class LoginIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void nulCharacterInEmailIsA400NotA500() throws Exception {
+        postJson("/api/auth/login", Map.of("email", "a\u0000b@example.com", "password", "password123"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fieldErrors[?(@.field=='email')]").exists());
+    }
+
+    @Test
+    void oversizedEmailIsA400() throws Exception {
+        postJson("/api/auth/login", Map.of("email", "e".repeat(256) + "@example.com", "password", "password123"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fieldErrors[?(@.field=='email')]").exists());
+    }
+
+    @Test
     void blankFieldsGivePerFieldErrors() throws Exception {
         postJson("/api/auth/login", Map.of("email", "", "password", ""))
                 .andExpect(status().isBadRequest())
