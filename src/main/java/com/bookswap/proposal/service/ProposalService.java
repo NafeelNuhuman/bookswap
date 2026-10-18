@@ -16,6 +16,7 @@ import com.bookswap.proposal.domain.SelfProposalException;
 import com.bookswap.proposal.domain.Side;
 import com.bookswap.proposal.repository.ProposalItemRepository;
 import com.bookswap.proposal.repository.ProposalRepository;
+import com.bookswap.proposal.web.ExchangeView;
 import com.bookswap.proposal.web.ProposalRequest;
 import com.bookswap.proposal.web.ProposalView;
 import org.springframework.data.domain.Page;
@@ -275,6 +276,24 @@ public class ProposalService {
         }
         List<ProposalView> views = assembler.toViews(result.getContent(), null, now);
         return PageResponse.from(new PageImpl<>(views, result.getPageable(), result.getTotalElements()));
+    }
+
+    /** The caller's completed exchanges, most recently completed first; never carries contact details. */
+    @Transactional(readOnly = true)
+    public PageResponse<ExchangeView> history(UUID me, int page, int size) {
+        Pageable pageable = Paging.pageable(page, size,
+                Sort.by(Sort.Order.desc("completedAt"), Sort.Order.asc("id")));
+        Page<Proposal> result = proposals.findCompleted(me, pageable);
+        List<ProposalView> views = assembler.toViews(result.getContent(), null, clock.instant());
+        List<ExchangeView> exchanges = new ArrayList<>();
+        for (ProposalView view : views) {
+            boolean iProposed = view.proposer().id().equals(me);
+            exchanges.add(new ExchangeView(view.id(), view.completedAt(),
+                    iProposed ? view.recipient() : view.proposer(),
+                    iProposed ? view.offered() : view.requested(),
+                    iProposed ? view.requested() : view.offered()));
+        }
+        return PageResponse.from(new PageImpl<>(exchanges, result.getPageable(), result.getTotalElements()));
     }
 
     /**

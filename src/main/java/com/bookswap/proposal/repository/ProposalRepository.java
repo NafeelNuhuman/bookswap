@@ -54,6 +54,14 @@ public interface ProposalRepository extends JpaRepository<Proposal, UUID> {
             """)
     List<UUID> findOverdueAccepted(@Param("now") Instant now, @Param("skip") Collection<UUID> skip, Pageable limit);
 
+    /** The user's completed exchanges, as either party. */
+    @Query("""
+            select p from Proposal p
+            where p.status = com.bookswap.proposal.domain.ProposalStatus.COMPLETED
+              and (p.proposerId = :me or p.recipientId = :me)
+            """)
+    Page<Proposal> findCompleted(@Param("me") UUID me, Pageable pageable);
+
     @Query("select p from Proposal p where p.recipientId = :me")
     Page<Proposal> findIncoming(@Param("me") UUID me, Pageable pageable);
 
