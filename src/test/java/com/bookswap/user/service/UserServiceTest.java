@@ -46,12 +46,13 @@ class UserServiceTest {
         when(users.findById(user.getId())).thenReturn(Optional.of(user));
 
         ProfileResponse profile = service().updateProfile(user.getId(),
-                new UpdateProfileRequest("Amy", "Berlin", "10115"));
+                new UpdateProfileRequest("Amy", "Berlin", "10115", "Signal +49 1"));
 
         assertThat(profile.profileComplete()).isTrue();
         assertThat(user.getDisplayName()).isEqualTo("Amy");
         assertThat(user.getCity()).isEqualTo("Berlin");
         assertThat(user.getPostalCode()).isEqualTo("10115");
+        assertThat(user.getContactNote()).isEqualTo("Signal +49 1");
     }
 
     @Test
@@ -66,7 +67,7 @@ class UserServiceTest {
         User user = new User("a@example.com", "hash", clock.instant());
         when(users.findById(user.getId())).thenReturn(Optional.of(user));
         assertThat(service().isProfileComplete(user.getId())).isFalse();
-        user.updateProfile("Pat", "Berlin", "10115", clock.instant());
+        user.updateProfile("Pat", "Berlin", "10115", null, clock.instant());
         assertThat(service().isProfileComplete(user.getId())).isTrue();
     }
 
@@ -75,5 +76,19 @@ class UserServiceTest {
         UUID id = UUID.randomUUID();
         when(users.findById(id)).thenReturn(Optional.empty());
         assertThatThrownBy(() -> service().isProfileComplete(id)).isInstanceOf(UserNotFoundException.class);
+    }
+
+    @Test
+    void requireExistsPassesForAKnownUser() {
+        UUID id = UUID.randomUUID();
+        when(users.existsById(id)).thenReturn(true);
+        service().requireExists(id);
+    }
+
+    @Test
+    void requireExistsThrowsForUnknownId() {
+        UUID id = UUID.randomUUID();
+        when(users.existsById(id)).thenReturn(false);
+        assertThatThrownBy(() -> service().requireExists(id)).isInstanceOf(UserNotFoundException.class);
     }
 }

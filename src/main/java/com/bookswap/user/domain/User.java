@@ -26,6 +26,9 @@ public class User {
     @Column(name = "postal_code")
     private String postalCode;
 
+    @Column(name = "contact_note")
+    private String contactNote;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -45,10 +48,11 @@ public class User {
         this.updatedAt = now;
     }
 
-    public void updateProfile(String displayName, String city, String postalCode, Instant now) {
+    public void updateProfile(String displayName, String city, String postalCode, String contactNote, Instant now) {
         this.displayName = displayName;
         this.city = city;
         this.postalCode = postalCode;
+        this.contactNote = contactNote;
         this.updatedAt = now;
     }
 
@@ -66,4 +70,5 @@ public class User {
     public String getDisplayName() { return displayName; }
     public String getCity() { return city; }
     public String getPostalCode() { return postalCode; }
+    public String getContactNote() { return contactNote; }
 }

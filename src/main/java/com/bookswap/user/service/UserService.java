@@ -34,8 +34,16 @@ public class UserService {
     @Transactional
     public ProfileResponse updateProfile(UUID principalId, UpdateProfileRequest request) {
         User user = load(principalId);
-        user.updateProfile(request.displayName(), request.city(), request.postalCode(), clock.instant());
+        user.updateProfile(request.displayName(), request.city(), request.postalCode(), request.contactNote(),
+                clock.instant());
         return ProfileResponse.from(user);
+    }
+
+    @Transactional(readOnly = true)
+    public void requireExists(UUID id) {
+        if (!users.existsById(id)) {
+            throw new UserNotFoundException();
+        }
     }
 
     private User load(UUID id) {

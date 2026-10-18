@@ -37,4 +37,19 @@ class SchemaIT extends AbstractIntegrationTest {
                 .isInstanceOf(DataIntegrityViolationException.class);
         jdbc.update(INSERT, UUID.randomUUID(), "d@example.com", "Bo", "Berlin", "10115");
     }
+
+    @Test
+    void proposalTablesExistAndAProposalCannotBeToYourself() {
+        Integer count = jdbc.queryForObject(
+                "select count(*) from information_schema.tables where table_name in ('proposal','proposal_item')",
+                Integer.class);
+        assertThat(count).isEqualTo(2);
+
+        UUID user = UUID.randomUUID();
+        jdbc.update(INSERT, user, "self@example.com", null, null, null);
+        assertThatThrownBy(() -> jdbc.update("""
+                insert into proposal(id, proposer_id, recipient_id, status, created_at, updated_at, expires_at, version)
+                values (?, ?, ?, 'PROPOSED', now(), now(), now() + interval '1 day', 0)""",
+                UUID.randomUUID(), user, user)).isInstanceOf(DataIntegrityViolationException.class);
+    }
 }

@@ -43,7 +43,7 @@ class DiscoveryServiceTest {
     }
 
     private void profileCity(String city) {
-        when(userService.getProfile(me)).thenReturn(new ProfileResponse(me, "me@example.com", "Me", city, "10115", city != null));
+        when(userService.getProfile(me)).thenReturn(new ProfileResponse(me, "me@example.com", "Me", city, "10115", null, city != null));
     }
 
     @Test
