@@ -11,6 +11,7 @@ import com.bookswap.copy.domain.CopyStatus;
 import com.bookswap.copy.repository.CopyRepository;
 import com.bookswap.copy.web.AddCopyRequest;
 import com.bookswap.copy.web.CopyResponse;
+import com.bookswap.proposal.service.ProposalService;
 import com.bookswap.user.service.UserService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -23,20 +24,23 @@ import java.util.UUID;
 
 /**
  * Every method takes the authenticated principal's id as {@code ownerId}; a copy that is not the caller's is
- * indistinguishable from a missing one. Step 4 will add "cancel proposed proposals" calls to the grade,
- * unlist and remove paths here: this is the single place those rules will live.
+ * indistinguishable from a missing one. Changing a copy's grade, unlisting it or removing it cancels the open
+ * proposals that contain it, in the same transaction: this is the single place that rule lives.
  */
 @Service
 public class CopyService {
     private final CopyRepository copies;
     private final BookService bookService;
     private final UserService userService;
+    private final ProposalService proposals;
     private final Clock clock;
 
-    public CopyService(CopyRepository copies, BookService bookService, UserService userService, Clock clock) {
+    public CopyService(CopyRepository copies, BookService bookService, UserService userService,
+                       ProposalService proposals, Clock clock) {
         this.copies = copies;
         this.bookService = bookService;
         this.userService = userService;
+        this.proposals = proposals;
         this.clock = clock;
     }
 
@@ -69,7 +73,11 @@ public class CopyService {
     @Transactional
     public CopyResponse changeGrade(UUID ownerId, UUID id, ConditionGrade grade) {
         Copy copy = load(ownerId, id);
+        boolean changed = copy.getGrade() != grade;
         copy.changeGrade(grade, clock.instant());
+        if (changed) {
+            proposals.cancelOpenForCopy(copy.getId(), clock.instant());
+        }
         return CopyResponse.from(copy);
     }
 
@@ -84,6 +92,7 @@ public class CopyService {
     public CopyResponse unlistCopy(UUID ownerId, UUID id) {
         Copy copy = load(ownerId, id);
         copy.unlist(clock.instant());
+        proposals.cancelOpenForCopy(copy.getId(), clock.instant());
         return CopyResponse.from(copy);
     }
 
@@ -91,6 +100,7 @@ public class CopyService {
     public void remove(UUID ownerId, UUID id) {
         Copy copy = load(ownerId, id);
         copy.requireRemovable();
+        proposals.cancelOpenForCopy(copy.getId(), clock.instant());
         copies.delete(copy);
     }
 

@@ -13,11 +13,13 @@ import com.bookswap.copy.domain.ProfileIncompleteException;
 import com.bookswap.copy.repository.CopyRepository;
 import com.bookswap.copy.web.AddCopyRequest;
 import com.bookswap.copy.web.CopyResponse;
+import com.bookswap.proposal.service.ProposalService;
 import com.bookswap.user.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
@@ -35,6 +37,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -46,6 +49,7 @@ class CopyServiceTest {
     @Mock CopyRepository copies;
     @Mock BookService bookService;
     @Mock UserService userService;
+    @Mock ProposalService proposals;
     CopyService service;
 
     UUID owner = UUID.randomUUID();
@@ -53,7 +57,7 @@ class CopyServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new CopyService(copies, bookService, userService, Clock.fixed(NOW, ZoneOffset.UTC));
+        service = new CopyService(copies, bookService, userService, proposals, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     private Copy ownedCopy() {
@@ -150,5 +154,48 @@ class CopyServiceTest {
         verify(copies).findByOwnerId(eq(owner), pageable.capture());
         assertThat(pageable.getValue().getPageSize()).isEqualTo(1);
         assertThat(r.content()).isEmpty();
+    }
+
+    @Test
+    void changingTheGradeCancelsOpenProposalsForTheCopy() {
+        Copy c = ownedCopy();
+        when(copies.findByIdAndOwnerId(c.getId(), owner)).thenReturn(Optional.of(c));
+        service.changeGrade(owner, c.getId(), ConditionGrade.POOR);
+        verify(proposals).cancelOpenForCopy(c.getId(), NOW);
+    }
+
+    @Test
+    void settingTheSameGradeDoesNotCancelAnything() {
+        Copy c = ownedCopy();
+        when(copies.findByIdAndOwnerId(c.getId(), owner)).thenReturn(Optional.of(c));
+        service.changeGrade(owner, c.getId(), ConditionGrade.GOOD);
+        verify(proposals, never()).cancelOpenForCopy(any(), any());
+    }
+
+    @Test
+    void unlistingCancelsOpenProposalsForTheCopy() {
+        Copy c = ownedCopy();
+        when(copies.findByIdAndOwnerId(c.getId(), owner)).thenReturn(Optional.of(c));
+        service.unlistCopy(owner, c.getId());
+        verify(proposals).cancelOpenForCopy(c.getId(), NOW);
+    }
+
+    @Test
+    void removingCancelsOpenProposalsBeforeDeleting() {
+        Copy c = ownedCopy();
+        when(copies.findByIdAndOwnerId(c.getId(), owner)).thenReturn(Optional.of(c));
+        service.remove(owner, c.getId());
+        InOrder order = inOrder(proposals, copies);
+        order.verify(proposals).cancelOpenForCopy(c.getId(), NOW);
+        order.verify(copies).delete(c);
+    }
+
+    @Test
+    void listingDoesNotCancelAnything() {
+        Copy c = ownedCopy();
+        when(copies.findByIdAndOwnerId(c.getId(), owner)).thenReturn(Optional.of(c));
+        when(userService.isProfileComplete(owner)).thenReturn(true);
+        service.listCopy(owner, c.getId());
+        verify(proposals, never()).cancelOpenForCopy(any(), any());
     }
 }
