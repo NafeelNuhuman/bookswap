@@ -110,6 +110,15 @@ public class Copy implements Persistable<UUID> {
         this.updatedAt = now;
     }
 
+    /** Taken out of circulation by an accepted proposal. Releasing it again arrives with step 5. */
+    public void reserve(Instant now) {
+        if (status != CopyStatus.AVAILABLE) {
+            throw new CopyNotAvailableException();
+        }
+        this.status = CopyStatus.RESERVED;
+        this.updatedAt = now;
+    }
+
     public void requireRemovable() {
         requireNotReserved();
     }

@@ -105,6 +105,25 @@ class CopyTest {
     }
 
     @Test
+    void reserveMovesAvailableToReserved() {
+        Copy c = copy();
+        c.list(true, T0);
+        c.reserve(T1);
+        assertThat(c.getStatus()).isEqualTo(CopyStatus.RESERVED);
+        assertThat(c.getUpdatedAt()).isEqualTo(T1);
+    }
+
+    @Test
+    void reserveFailsFromUnlistedAndReserved() throws Exception {
+        Copy unlisted = copy();
+        assertThatThrownBy(() -> unlisted.reserve(T1)).isInstanceOf(CopyNotAvailableException.class);
+        Copy reservedCopy = reserved(copy());
+        assertThatThrownBy(() -> reservedCopy.reserve(T1)).isInstanceOf(CopyNotAvailableException.class);
+        assertThat(unlisted.getStatus()).isEqualTo(CopyStatus.UNLISTED);
+        assertThat(reservedCopy.getStatus()).isEqualTo(CopyStatus.RESERVED);
+    }
+
+    @Test
     void everyGradeHasALabelAndCriteria() {
         for (ConditionGrade g : ConditionGrade.values()) {
             assertThat(g.label()).isNotBlank();
