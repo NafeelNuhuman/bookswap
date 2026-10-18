@@ -79,7 +79,7 @@ class ProposalServiceTest {
     }
 
     private void loads(Copy... all) {
-        when(copies.findAllByIdIn(anyCollection())).thenReturn(List.of(all));
+        when(copies.lockForShare(anyCollection())).thenReturn(List.of(all));
     }
 
     @Test
@@ -239,7 +239,7 @@ class ProposalServiceTest {
     }
 
     @Test
-    void acceptReservesCopiesInAscendingIdOrder() {
+    void acceptReservesEveryLockedCopyAndSavesThemTogether() {
         Copy requested = available(other, ConditionGrade.GOOD);
         Copy mine1 = available(me, ConditionGrade.GOOD);
         Copy mine2 = available(me, ConditionGrade.GOOD);
@@ -249,7 +249,7 @@ class ProposalServiceTest {
                 new ProposalItem(p.getId(), requested.getId(), Side.REQUESTED, ConditionGrade.GOOD),
                 new ProposalItem(p.getId(), mine1.getId(), Side.OFFERED, ConditionGrade.GOOD),
                 new ProposalItem(p.getId(), mine2.getId(), Side.OFFERED, ConditionGrade.GOOD)));
-        when(copies.findAllByIdIn(anyCollection())).thenReturn(List.of(requested, mine1, mine2));
+        when(copies.lockForUpdate(anyCollection())).thenReturn(List.of(requested, mine1, mine2));   // the query orders by id
 
         service.accept(other, p.getId());
 
@@ -258,7 +258,7 @@ class ProposalServiceTest {
         verify(copies).saveAllAndFlush(saved.capture());
         List<UUID> ids = new ArrayList<>();
         saved.getValue().forEach(c -> ids.add(c.getId()));
-        assertThat(ids).hasSize(3).isSorted();
+        assertThat(ids).containsExactlyInAnyOrder(requested.getId(), mine1.getId(), mine2.getId());
         assertThat(List.of(requested, mine1, mine2)).allSatisfy(c -> assertThat(c.getStatus()).isEqualTo(CopyStatus.RESERVED));
         assertThat(p.getStatus()).isEqualTo(ProposalStatus.ACCEPTED);
         verify(proposals).cancelOpenContaining(anyCollection(), eq(p.getId()), eq(NOW));
@@ -273,11 +273,46 @@ class ProposalServiceTest {
         when(items.findByIdProposalId(p.getId())).thenReturn(List.of(
                 new ProposalItem(p.getId(), requested.getId(), Side.REQUESTED, ConditionGrade.GOOD),
                 new ProposalItem(p.getId(), notMineAnymore.getId(), Side.OFFERED, ConditionGrade.GOOD)));
-        when(copies.findAllByIdIn(anyCollection())).thenReturn(List.of(requested, notMineAnymore));
+        when(copies.lockForUpdate(anyCollection())).thenReturn(List.of(requested, notMineAnymore));
 
         assertThatThrownBy(() -> service.accept(other, p.getId())).isInstanceOf(CopyNotAvailableException.class);
         assertThat(requested.getStatus()).isEqualTo(CopyStatus.AVAILABLE);
         verify(copies, never()).saveAllAndFlush(any());
+    }
+
+    @Test
+    void acceptWithAChangedGradeIsCopyNotAvailable() {
+        Copy requested = available(other, ConditionGrade.GOOD);
+        Copy regraded = available(me, ConditionGrade.POOR);       // was GOOD when the proposal was made
+        Proposal p = proposalFromMeTo(other);
+        when(proposals.findById(p.getId())).thenReturn(java.util.Optional.of(p));
+        when(items.findByIdProposalId(p.getId())).thenReturn(List.of(
+                new ProposalItem(p.getId(), requested.getId(), Side.REQUESTED, ConditionGrade.GOOD),
+                new ProposalItem(p.getId(), regraded.getId(), Side.OFFERED, ConditionGrade.GOOD)));
+        when(copies.lockForUpdate(anyCollection())).thenReturn(List.of(requested, regraded));
+
+        assertThatThrownBy(() -> service.accept(other, p.getId())).isInstanceOf(CopyNotAvailableException.class);
+        assertThat(requested.getStatus()).isEqualTo(CopyStatus.AVAILABLE);
+    }
+
+    @Test
+    void acceptLocksTheCopiesBeforeItChangesTheProposal() {
+        Copy requested = available(other, ConditionGrade.GOOD);
+        Copy mine = available(me, ConditionGrade.GOOD);
+        Proposal p = proposalFromMeTo(other);
+        when(proposals.findById(p.getId())).thenReturn(java.util.Optional.of(p));
+        when(items.findByIdProposalId(p.getId())).thenReturn(List.of(
+                new ProposalItem(p.getId(), requested.getId(), Side.REQUESTED, ConditionGrade.GOOD),
+                new ProposalItem(p.getId(), mine.getId(), Side.OFFERED, ConditionGrade.GOOD)));
+        when(copies.lockForUpdate(anyCollection())).thenAnswer(i -> {
+            assertThat(p.getStatus()).as("the proposal is untouched while the copies are being locked")
+                    .isEqualTo(ProposalStatus.PROPOSED);
+            return List.of(requested, mine);
+        });
+
+        service.accept(other, p.getId());
+
+        assertThat(p.getStatus()).isEqualTo(ProposalStatus.ACCEPTED);
     }
 
     @Test
@@ -288,7 +323,7 @@ class ProposalServiceTest {
         when(items.findByIdProposalId(p.getId())).thenReturn(List.of(
                 new ProposalItem(p.getId(), requested.getId(), Side.REQUESTED, ConditionGrade.GOOD),
                 new ProposalItem(p.getId(), UUID.randomUUID(), Side.OFFERED, ConditionGrade.GOOD)));
-        when(copies.findAllByIdIn(anyCollection())).thenReturn(List.of(requested));
+        when(copies.lockForUpdate(anyCollection())).thenReturn(List.of(requested));
         assertThatThrownBy(() -> service.accept(other, p.getId())).isInstanceOf(CopyNotAvailableException.class);
     }
 

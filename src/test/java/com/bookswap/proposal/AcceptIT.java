@@ -121,6 +121,20 @@ class AcceptIT extends ProposalTestBase {
     }
 
     @Test
+    void acceptFailsWhenACopysGradeChangedBehindTheProposalsBack() throws Exception {
+        String b1 = addListed(bob, 1, "Book 1");
+        String a1 = addListed(alice, 3, "Book 3");
+        String id = proposeOk(alice, List.of(b1), List.of(a1));
+        // simulates the regrade slipping in after the proposal was written but before its cancellation could see it
+        jdbc.update("update copy set grade = 'POOR' where id = ?::uuid", b1);
+
+        action(bob, id, "accept").andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("COPY_NOT_AVAILABLE"));
+        assertThat(copyStatus(b1)).isEqualTo("AVAILABLE");
+        assertThat(proposalStatus(id)).isEqualTo("PROPOSED");
+    }
+
+    @Test
     void acceptedCopiesDisappearFromFeedSearchAndTheShelf() throws Exception {
         String b1 = addListed(bob, 1, "Book 1");
         String a1 = addListed(alice, 3, "Book 3");

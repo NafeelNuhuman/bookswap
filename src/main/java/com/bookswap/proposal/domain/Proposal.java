@@ -86,6 +86,11 @@ public class Proposal implements Persistable<UUID> {
         return status == ProposalStatus.PROPOSED && !now.isBefore(expiresAt) ? ProposalStatus.EXPIRED : status;
     }
 
+    /** The checks of {@link #accept}, without changing anything: so a caller can lock what it needs first. */
+    public void requireAcceptableBy(UUID actor, Instant now) {
+        requireOpenFor(recipientId, actor, now);
+    }
+
     public void accept(UUID actor, Instant now) {
         requireOpenFor(recipientId, actor, now);
         this.status = ProposalStatus.ACCEPTED;

@@ -68,3 +68,28 @@ Whole-branch review of `0483854..b6ea022`. The one Important finding (Java and P
 ## Set aside by the reviewer as by design / out of scope
 
 A title that is itself a valid ISBN is searched only as an ISBN (spec); a partial ISBN never matches as part of an ISBN; "newest first" means when the copy was added, not when it was listed (a product question worth revisiting); exact city match only, no aliases (München/Munich) and no Unicode normalization (NFC/NFD); `ownerCity` is shown as typed; `copyId` is exposed and the owner id is not (step 4 will need more); a deleted principal with an explicit `city` still gets results (pre-existing token-lifetime behaviour); no relevance ranking and no grade filter (US-13).
+
+---
+
+# Deferred items from the Step 4 (Exchange core) review
+
+Whole-branch review of `367df92..4f33b9d` by a fresh most-capable-model reviewer. Two Important findings were fixed with tests: (1) accept took row locks in proposal-then-copy order, so competing accepts and accept-versus-unlist deadlocked (PostgreSQL broke them after about a second, answering 409; now copies are locked first, in id order, and a deadlock-counter assertion guards it); (2) a propose racing a regrade, unlist or accept could leave an open proposal at a stale grade or on a reserved copy (propose now reads copies `FOR SHARE`; accept also re-checks the grade seen at proposal time). Open items:
+
+## Ruling (not fixed)
+
+- Removing a copy deletes its `proposal_item` rows by cascade, so a closed proposal's history loses that book (the cancellation cause stays, the book is gone). This was a call listed in the spec that was reviewed and accepted. Fix when wanted: snapshot isbn/title/author/cover on `proposal_item` and drop the cascade, or soft-delete copies.
+
+## Minors
+
+1. `cancelOpenContaining` also cancels proposals that are stored `PROPOSED` but already lapsed, so one that read as `EXPIRED` can become `CANCELLED`/`COPY_UNAVAILABLE`. Add `and p.expiresAt > :now`.
+2. `proposal.parent_id` FK has no index; cascaded proposal deletes (account deletion, step 5) scan for children. Add one.
+3. `role` is case-insensitive but `status` is case-sensitive (`status=proposed` is a 400). Make them consistent.
+4. `@NotFound(IGNORE)` on `Copy.book` makes Hibernate load the book eagerly, so the copy lookups in propose/accept issue one extra SELECT per distinct ISBN (bounded at 10).
+5. `PUT /api/users/me` clears `contactNote` when the field is omitted (PUT semantics); document it for clients.
+6. `ProposalViewAssembler.party` would throw (500) if a user row vanished between loading a proposal and its parties, which can only happen in a race with account deletion.
+7. The inbox status filter is a parameter-OR query; with generic prepared plans the index may only help on the user column. Fine at this scale.
+
+## Set aside by the reviewer as by design / out of scope
+
+No rate limiting or request-size limit on propose (app-wide); malformed JSON gives `MALFORMED_REQUEST` rather than `INVALID_PROPOSAL` (existing handler); a counter requesting the counterer's own copies is `SELF_PROPOSAL` (author's ruling, agreed); "requested copies must share an owner" is a 400 rather than 409 (nothing probeable: those copies are public in the feed); message length counts UTF-16 units (strict side).
+

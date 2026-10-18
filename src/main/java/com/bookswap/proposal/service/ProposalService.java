@@ -28,7 +28,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -76,32 +75,35 @@ public class ProposalService {
     }
 
     /**
-     * Reserves every copy on both sides in one transaction. Copies are locked in ascending id order and flushed
-     * before the proposal and the competing-proposal cancellation are written, so two accepts over overlapping
-     * copies cannot deadlock: the loser fails its version check (409) and changes nothing.
+     * Reserves every copy on both sides in one transaction. The copies are locked first, in ascending id order,
+     * before anything else is written; every writer (this, the copy hooks, propose) takes copy locks before
+     * proposal locks, so competing accepts and accept-versus-unlist cannot deadlock. The loser sees the copies
+     * already reserved (or fails its version check) and gets a 409 having changed nothing.
      */
     @Transactional
     public ProposalView accept(UUID me, UUID id) {
         Instant now = clock.instant();
         Proposal proposal = load(me, id);
-        proposal.accept(me, now);
+        proposal.requireAcceptableBy(me, now);
 
-        Map<UUID, Side> sides = new HashMap<>();
-        items.findByIdProposalId(id).forEach(i -> sides.put(i.getCopyId(), i.getSide()));
-        List<Copy> toReserve = new ArrayList<>(copies.findAllByIdIn(sides.keySet()));
-        if (toReserve.size() != sides.size()) {
+        Map<UUID, ProposalItem> itemsByCopy = new HashMap<>();
+        items.findByIdProposalId(id).forEach(i -> itemsByCopy.put(i.getCopyId(), i));
+        List<Copy> toReserve = copies.lockForUpdate(itemsByCopy.keySet());
+        if (toReserve.size() != itemsByCopy.size()) {
             throw new CopyNotAvailableException();
         }
-        toReserve.sort(Comparator.comparing(Copy::getId));
         for (Copy copy : toReserve) {
-            UUID expectedOwner = sides.get(copy.getId()) == Side.OFFERED ? proposal.getProposerId() : proposal.getRecipientId();
-            if (!copy.getOwnerId().equals(expectedOwner) || copy.getStatus() != CopyStatus.AVAILABLE) {
+            ProposalItem item = itemsByCopy.get(copy.getId());
+            UUID expectedOwner = item.getSide() == Side.OFFERED ? proposal.getProposerId() : proposal.getRecipientId();
+            if (!copy.getOwnerId().equals(expectedOwner) || copy.getStatus() != CopyStatus.AVAILABLE
+                    || copy.getGrade() != item.getGradeAtProposal()) {
                 throw new CopyNotAvailableException();
             }
         }
+        proposal.accept(me, now);
         toReserve.forEach(copy -> copy.reserve(now));
         copies.saveAllAndFlush(toReserve);
-        proposals.cancelOpenContaining(sides.keySet(), id, now);
+        proposals.cancelOpenContaining(itemsByCopy.keySet(), id, now);
         return assembler.toView(proposal, me, now);
     }
 
@@ -172,7 +174,7 @@ public class ProposalService {
         String message = checkedMessage(request.message());
 
         Map<UUID, Copy> found = new HashMap<>();
-        copies.findAllByIdIn(all).forEach(c -> found.put(c.getId(), c));
+        copies.lockForShare(all).forEach(c -> found.put(c.getId(), c));
         List<Copy> requested = requireAvailable(requestedIds, found);
         List<Copy> offered = requireAvailable(offeredIds, found);
         for (Copy c : offered) {
@@ -226,7 +228,7 @@ public class ProposalService {
             return null;
         }
         String text = value.strip();
-        if (text.length() > MAX_MESSAGE_LENGTH || text.indexOf(' ') >= 0) {
+        if (text.length() > MAX_MESSAGE_LENGTH || text.indexOf('\0') >= 0) {
             throw new InvalidProposalException(
                     "The " + what + " must be at most " + MAX_MESSAGE_LENGTH + " characters and contain no NUL");
         }

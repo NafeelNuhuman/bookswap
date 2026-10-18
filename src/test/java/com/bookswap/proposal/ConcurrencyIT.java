@@ -13,7 +13,9 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 
 /**
  * Real threads against PostgreSQL. Every scenario repeats for several rounds with fresh copies and asserts the
@@ -21,7 +23,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  * twice, an accepted proposal must hold only reserved copies, and nobody may get a 500.
  */
 class ConcurrencyIT extends ProposalTestBase {
-    private static final int ROUNDS = 5;
+    private static final int ROUNDS = 8;
 
     /** Starts all calls together on their own threads and returns their HTTP statuses in call order. */
     private List<Integer> race(List<Callable<ResultActions>> calls) throws Exception {
@@ -58,6 +60,12 @@ class ConcurrencyIT extends ProposalTestBase {
         return jdbc.queryForObject("select status from copy where id = ?::uuid", String.class, id);
     }
 
+    /** PostgreSQL's own count of deadlocks it had to break (statistics are flushed about once a second). */
+    private long deadlocks() throws Exception {
+        Thread.sleep(1500);
+        return jdbc.queryForObject("select deadlocks from pg_stat_database where datname = current_database()", Long.class);
+    }
+
     private static long successes(List<Integer> statuses) {
         return statuses.stream().filter(s -> s == 200 || s == 201).count();
     }
@@ -82,6 +90,7 @@ class ConcurrencyIT extends ProposalTestBase {
 
     @Test
     void competingAcceptsOfOverlappingProposalsLeaveExactlyOneAccepted() throws Exception {
+        long deadlocksBefore = deadlocks();
         for (int round = 0; round < ROUNDS; round++) {
             String b1 = addListed(bob, 1, "Book 1");
             String b2 = addListed(bob, 2, "Book 2");
@@ -98,6 +107,8 @@ class ConcurrencyIT extends ProposalTestBase {
             assertThat(copyStatus(b1)).isEqualTo("RESERVED");
             assertConsistent();
         }
+        assertThat(deadlocks()).as("accepts take copy locks first, so PostgreSQL never has to break a deadlock")
+                .isEqualTo(deadlocksBefore);
     }
 
     @Test
@@ -133,6 +144,7 @@ class ConcurrencyIT extends ProposalTestBase {
 
     @Test
     void acceptRacingTheOwnerUnlistingAnIncludedCopyIsConsistent() throws Exception {
+        long deadlocksBefore = deadlocks();
         for (int round = 0; round < ROUNDS; round++) {
             String b1 = addListed(bob, 1, "Book 1");
             String a1 = addListed(alice, 3, "Book 3");
@@ -149,6 +161,59 @@ class ConcurrencyIT extends ProposalTestBase {
                 assertThat(copyStatus(a1)).isEqualTo("UNLISTED");
                 assertThat(copyStatus(b1)).isEqualTo("AVAILABLE");
             }
+            assertConsistent();
+        }
+        assertThat(deadlocks()).as("accept and unlist lock copies before proposals").isEqualTo(deadlocksBefore);
+    }
+
+    /** Open proposals may only hold copies that are still available at the grade the proposal saw. */
+    private void assertNoStaleOpenProposal() {
+        assertThat(jdbc.queryForObject("""
+                select count(*) from proposal_item pi join proposal p on p.id = pi.proposal_id
+                join copy c on c.id = pi.copy_id
+                where p.status = 'PROPOSED' and (c.status <> 'AVAILABLE' or c.grade <> pi.grade_at_proposal)""", Integer.class))
+                .as("open proposals holding an unavailable or regraded copy").isZero();
+    }
+
+    @Test
+    void proposingWhileTheOwnerRegradesTheCopyNeverLeavesAStaleOpenProposal() throws Exception {
+        for (int round = 0; round < ROUNDS * 3; round++) {
+            String b1 = addListed(bob, 1, "Book 1");
+            String a1 = addListed(alice, 3, "Book 3");
+            List<Integer> statuses = race(List.of(() -> propose(alice, List.of(b1), List.of(a1), null),
+                    () -> mvc.perform(put("/api/copies/" + b1).header("Authorization", bearer(bob))
+                            .contentType(APPLICATION_JSON).content("{\"grade\":\"POOR\"}"))));
+            assertThat(statuses).as("round %d", round).allMatch(s -> s == 200 || s == 201 || s == 409);
+            assertNoStaleOpenProposal();
+            assertConsistent();
+        }
+    }
+
+    @Test
+    void proposingWhileTheOwnerUnlistsTheCopyNeverLeavesAStaleOpenProposal() throws Exception {
+        for (int round = 0; round < ROUNDS * 3; round++) {
+            String b1 = addListed(bob, 1, "Book 1");
+            String a1 = addListed(alice, 3, "Book 3");
+            List<Integer> statuses = race(List.of(() -> propose(alice, List.of(b1), List.of(a1), null),
+                    () -> mvc.perform(post("/api/copies/" + b1 + "/unlist").header("Authorization", bearer(bob)))));
+            assertThat(statuses).as("round %d", round).allMatch(s -> s == 200 || s == 201 || s == 409);
+            mvc.perform(post("/api/copies/" + b1 + "/list").header("Authorization", bearer(bob)));   // relisting must not revive anything
+            assertNoStaleOpenProposal();
+            assertConsistent();
+        }
+    }
+
+    @Test
+    void proposingWhileAnotherProposalForTheSameCopyIsAcceptedNeverLeavesAnOpenOneOnAReservedCopy() throws Exception {
+        for (int round = 0; round < ROUNDS * 3; round++) {
+            String b1 = addListed(bob, 1, "Book 1");
+            String a1 = addListed(alice, 3, "Book 3");
+            String c1 = addListed(carol, 4, "Book 4");
+            String first = proposeOk(carol, List.of(b1), List.of(c1));
+            List<Integer> statuses = race(List.of(() -> action(bob, first, "accept"),
+                    () -> propose(alice, List.of(b1), List.of(a1), null)));
+            assertThat(statuses).as("round %d", round).allMatch(s -> s == 200 || s == 201 || s == 409);
+            assertNoStaleOpenProposal();
             assertConsistent();
         }
     }
