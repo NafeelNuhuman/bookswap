@@ -27,6 +27,25 @@ public class ProposalController {
         return proposalService.propose(UUID.fromString(principal.getName()), request);
     }
 
+    /** Recipient only: reserves every copy on both sides and cancels competing proposals. */
+    @PostMapping("/{id}/accept")
+    public ProposalView accept(Principal principal, @PathVariable UUID id) {
+        return proposalService.accept(UUID.fromString(principal.getName()), id);
+    }
+
+    @PostMapping("/{id}/reject")
+    public ProposalView reject(Principal principal, @PathVariable UUID id,
+                               @RequestBody(required = false) RejectRequest request) {
+        return proposalService.reject(UUID.fromString(principal.getName()), id,
+                request == null ? null : request.reason());
+    }
+
+    /** Proposer only, while the proposal is still open. */
+    @PostMapping("/{id}/cancel")
+    public ProposalView cancel(Principal principal, @PathVariable UUID id) {
+        return proposalService.cancel(UUID.fromString(principal.getName()), id);
+    }
+
     /** Proposals made to the caller ({@code incoming}) or by the caller ({@code outgoing}), newest first. */
     @GetMapping
     public PageResponse<ProposalView> list(Principal principal,

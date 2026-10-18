@@ -7,8 +7,11 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.UUID;
 
 public interface ProposalItemRepository extends JpaRepository<ProposalItem, ProposalItem.Key> {
+
+    List<ProposalItem> findByIdProposalId(UUID proposalId);
 
     /** The displayed title/author is the shared book's if one exists, otherwise the details typed on the copy. */
     @Query("""
@@ -20,5 +23,5 @@ public interface ProposalItemRepository extends JpaRepository<ProposalItem, Prop
             where i.id.proposalId in :proposalIds
             order by c.createdAt, c.id
             """)
-    List<ProposalItemRow> findRows(@Param("proposalIds") Collection<java.util.UUID> proposalIds);
+    List<ProposalItemRow> findRows(@Param("proposalIds") Collection<UUID> proposalIds);
 }

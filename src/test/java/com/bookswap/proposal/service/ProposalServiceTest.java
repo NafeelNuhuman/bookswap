@@ -4,10 +4,12 @@ import com.bookswap.book.domain.Book;
 import com.bookswap.copy.domain.ConditionGrade;
 import com.bookswap.copy.domain.Copy;
 import com.bookswap.copy.domain.CopyNotAvailableException;
+import com.bookswap.copy.domain.CopyStatus;
 import com.bookswap.copy.repository.CopyRepository;
 import com.bookswap.proposal.domain.InvalidProposalException;
 import com.bookswap.proposal.domain.Proposal;
 import com.bookswap.proposal.domain.ProposalItem;
+import com.bookswap.proposal.domain.ProposalNotFoundException;
 import com.bookswap.proposal.domain.ProposalStatus;
 import com.bookswap.proposal.domain.SelfProposalException;
 import com.bookswap.proposal.domain.Side;
@@ -230,6 +232,91 @@ class ProposalServiceTest {
                 .thenReturn(Page.empty());
         service.list(me, "OUTGOING", ProposalStatus.EXPIRED, 0, 20);
         verify(proposals).findOutgoingByStatus(eq(me), eq(ProposalStatus.EXPIRED), eq(NOW), any(Pageable.class));
+    }
+
+    private Proposal proposalFromMeTo(UUID recipient) {
+        return Proposal.create(me, recipient, null, null, NOW, Duration.ofDays(14));
+    }
+
+    @Test
+    void acceptReservesCopiesInAscendingIdOrder() {
+        Copy requested = available(other, ConditionGrade.GOOD);
+        Copy mine1 = available(me, ConditionGrade.GOOD);
+        Copy mine2 = available(me, ConditionGrade.GOOD);
+        Proposal p = proposalFromMeTo(other);
+        when(proposals.findById(p.getId())).thenReturn(java.util.Optional.of(p));
+        when(items.findByIdProposalId(p.getId())).thenReturn(List.of(
+                new ProposalItem(p.getId(), requested.getId(), Side.REQUESTED, ConditionGrade.GOOD),
+                new ProposalItem(p.getId(), mine1.getId(), Side.OFFERED, ConditionGrade.GOOD),
+                new ProposalItem(p.getId(), mine2.getId(), Side.OFFERED, ConditionGrade.GOOD)));
+        when(copies.findAllByIdIn(anyCollection())).thenReturn(List.of(requested, mine1, mine2));
+
+        service.accept(other, p.getId());
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Iterable<Copy>> saved = ArgumentCaptor.forClass(Iterable.class);
+        verify(copies).saveAllAndFlush(saved.capture());
+        List<UUID> ids = new ArrayList<>();
+        saved.getValue().forEach(c -> ids.add(c.getId()));
+        assertThat(ids).hasSize(3).isSorted();
+        assertThat(List.of(requested, mine1, mine2)).allSatisfy(c -> assertThat(c.getStatus()).isEqualTo(CopyStatus.RESERVED));
+        assertThat(p.getStatus()).isEqualTo(ProposalStatus.ACCEPTED);
+        verify(proposals).cancelOpenContaining(anyCollection(), eq(p.getId()), eq(NOW));
+    }
+
+    @Test
+    void acceptWithAForeignOwnedCopyIsCopyNotAvailableAndReservesNothing() {
+        Copy requested = available(other, ConditionGrade.GOOD);
+        Copy notMineAnymore = available(UUID.randomUUID(), ConditionGrade.GOOD);   // offered, but owned by a third user
+        Proposal p = proposalFromMeTo(other);
+        when(proposals.findById(p.getId())).thenReturn(java.util.Optional.of(p));
+        when(items.findByIdProposalId(p.getId())).thenReturn(List.of(
+                new ProposalItem(p.getId(), requested.getId(), Side.REQUESTED, ConditionGrade.GOOD),
+                new ProposalItem(p.getId(), notMineAnymore.getId(), Side.OFFERED, ConditionGrade.GOOD)));
+        when(copies.findAllByIdIn(anyCollection())).thenReturn(List.of(requested, notMineAnymore));
+
+        assertThatThrownBy(() -> service.accept(other, p.getId())).isInstanceOf(CopyNotAvailableException.class);
+        assertThat(requested.getStatus()).isEqualTo(CopyStatus.AVAILABLE);
+        verify(copies, never()).saveAllAndFlush(any());
+    }
+
+    @Test
+    void acceptWithAMissingCopyIsCopyNotAvailable() {
+        Copy requested = available(other, ConditionGrade.GOOD);
+        Proposal p = proposalFromMeTo(other);
+        when(proposals.findById(p.getId())).thenReturn(java.util.Optional.of(p));
+        when(items.findByIdProposalId(p.getId())).thenReturn(List.of(
+                new ProposalItem(p.getId(), requested.getId(), Side.REQUESTED, ConditionGrade.GOOD),
+                new ProposalItem(p.getId(), UUID.randomUUID(), Side.OFFERED, ConditionGrade.GOOD)));
+        when(copies.findAllByIdIn(anyCollection())).thenReturn(List.of(requested));
+        assertThatThrownBy(() -> service.accept(other, p.getId())).isInstanceOf(CopyNotAvailableException.class);
+    }
+
+    @Test
+    void cancelOpenForCopyCancelsOpenProposalsContainingIt() {
+        UUID copyId = UUID.randomUUID();
+        service.cancelOpenForCopy(copyId, NOW);
+        verify(proposals).cancelOpenContaining(List.of(copyId), new UUID(0L, 0L), NOW);
+    }
+
+    @Test
+    void rejectStoresTheTrimmedReason() {
+        Proposal p = proposalFromMeTo(other);
+        when(proposals.findById(p.getId())).thenReturn(java.util.Optional.of(p));
+        service.reject(other, p.getId(), "  no thanks ");
+        assertThat(p.getStatus()).isEqualTo(ProposalStatus.REJECTED);
+        assertThat(p.getRejectReason()).isEqualTo("no thanks");
+    }
+
+    @Test
+    void strangerCannotActOnAProposal() {
+        Proposal p = proposalFromMeTo(other);
+        when(proposals.findById(p.getId())).thenReturn(java.util.Optional.of(p));
+        UUID stranger = UUID.randomUUID();
+        assertThatThrownBy(() -> service.accept(stranger, p.getId())).isInstanceOf(ProposalNotFoundException.class);
+        assertThatThrownBy(() -> service.reject(stranger, p.getId(), null)).isInstanceOf(ProposalNotFoundException.class);
+        assertThatThrownBy(() -> service.cancel(stranger, p.getId())).isInstanceOf(ProposalNotFoundException.class);
+        assertThat(p.getStatus()).isEqualTo(ProposalStatus.PROPOSED);
     }
 
     @Test

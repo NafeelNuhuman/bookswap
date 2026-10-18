@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -35,8 +36,9 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return respond(ex.getStatus(), ex.getCode(), ex.getMessage(), List.of(), request.getRequestURI());
     }
 
-    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
-    ResponseEntity<Object> handleOptimisticLock(ObjectOptimisticLockingFailureException ex, HttpServletRequest request) {
+    /** Lost an optimistic version check, or the database aborted us as a lock/deadlock victim: retry-able either way. */
+    @ExceptionHandler({ObjectOptimisticLockingFailureException.class, PessimisticLockingFailureException.class})
+    ResponseEntity<Object> handleOptimisticLock(Exception ex, HttpServletRequest request) {
         return respond(HttpStatus.CONFLICT, "CONCURRENT_UPDATE",
                 "The resource was modified concurrently, please retry", List.of(), request.getRequestURI());
     }

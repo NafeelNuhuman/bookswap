@@ -26,6 +26,11 @@ public class ErrorProbeController {
         throw new ObjectOptimisticLockingFailureException(Object.class, 1L);
     }
 
+    @GetMapping("/deadlock")
+    public void deadlock() {
+        throw new org.springframework.dao.CannotAcquireLockException("deadlock detected");
+    }
+
     @GetMapping("/boom")
     public void boom() {
         throw new IllegalStateException("secret internals");

@@ -28,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -44,6 +45,8 @@ import java.util.UUID;
 public class ProposalService {
     static final int MAX_COPIES_PER_SIDE = 5;
     static final int MAX_MESSAGE_LENGTH = 500;
+    /** Passed as the proposal to leave out when no proposal is being accepted. */
+    private static final UUID NO_PROPOSAL = new UUID(0L, 0L);
 
     private final ProposalRepository proposals;
     private final ProposalItemRepository items;
@@ -70,6 +73,58 @@ public class ProposalService {
     @Transactional(readOnly = true)
     public ProposalView get(UUID me, UUID id) {
         return assembler.toView(load(me, id), me, clock.instant());
+    }
+
+    /**
+     * Reserves every copy on both sides in one transaction. Copies are locked in ascending id order and flushed
+     * before the proposal and the competing-proposal cancellation are written, so two accepts over overlapping
+     * copies cannot deadlock: the loser fails its version check (409) and changes nothing.
+     */
+    @Transactional
+    public ProposalView accept(UUID me, UUID id) {
+        Instant now = clock.instant();
+        Proposal proposal = load(me, id);
+        proposal.accept(me, now);
+
+        Map<UUID, Side> sides = new HashMap<>();
+        items.findByIdProposalId(id).forEach(i -> sides.put(i.getCopyId(), i.getSide()));
+        List<Copy> toReserve = new ArrayList<>(copies.findAllByIdIn(sides.keySet()));
+        if (toReserve.size() != sides.size()) {
+            throw new CopyNotAvailableException();
+        }
+        toReserve.sort(Comparator.comparing(Copy::getId));
+        for (Copy copy : toReserve) {
+            UUID expectedOwner = sides.get(copy.getId()) == Side.OFFERED ? proposal.getProposerId() : proposal.getRecipientId();
+            if (!copy.getOwnerId().equals(expectedOwner) || copy.getStatus() != CopyStatus.AVAILABLE) {
+                throw new CopyNotAvailableException();
+            }
+        }
+        toReserve.forEach(copy -> copy.reserve(now));
+        copies.saveAllAndFlush(toReserve);
+        proposals.cancelOpenContaining(sides.keySet(), id, now);
+        return assembler.toView(proposal, me, now);
+    }
+
+    @Transactional
+    public ProposalView reject(UUID me, UUID id, String reason) {
+        Instant now = clock.instant();
+        Proposal proposal = load(me, id);
+        proposal.reject(me, checkedText(reason, "reason"), now);
+        return assembler.toView(proposal, me, now);
+    }
+
+    @Transactional
+    public ProposalView cancel(UUID me, UUID id) {
+        Instant now = clock.instant();
+        Proposal proposal = load(me, id);
+        proposal.cancel(me, now);
+        return assembler.toView(proposal, me, now);
+    }
+
+    /** Called by the copy service, in its transaction, when a copy is regraded, unlisted or removed. */
+    @Transactional
+    public void cancelOpenForCopy(UUID copyId, Instant now) {
+        proposals.cancelOpenContaining(List.of(copyId), NO_PROPOSAL, now);
     }
 
     /** The caller's incoming or outgoing proposals, newest first; list cards never carry contact details. */
@@ -151,13 +206,18 @@ public class ProposalService {
     }
 
     private static String checkedMessage(String message) {
-        if (message == null || message.isBlank()) {
+        return checkedText(message, "message");
+    }
+
+    /** Optional free text: blank means none; at most 500 characters and no NUL (PostgreSQL cannot store NUL). */
+    private static String checkedText(String value, String what) {
+        if (value == null || value.isBlank()) {
             return null;
         }
-        String text = message.strip();
-        if (text.length() > MAX_MESSAGE_LENGTH || text.indexOf('\u0000') >= 0) {
+        String text = value.strip();
+        if (text.length() > MAX_MESSAGE_LENGTH || text.indexOf(' ') >= 0) {
             throw new InvalidProposalException(
-                    "The message must be at most " + MAX_MESSAGE_LENGTH + " characters and contain no NUL");
+                    "The " + what + " must be at most " + MAX_MESSAGE_LENGTH + " characters and contain no NUL");
         }
         return text;
     }

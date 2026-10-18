@@ -57,6 +57,13 @@ class GlobalExceptionHandlerIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void databaseLockFailureIsAConflictToo() throws Exception {
+        mvc.perform(get("/api/auth/_probe/deadlock"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("CONCURRENT_UPDATE"));
+    }
+
+    @Test
     void unexpectedErrorsDoNotLeakInternals() throws Exception {
         mvc.perform(get("/api/auth/_probe/boom"))
                 .andExpect(status().isInternalServerError())

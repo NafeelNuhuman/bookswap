@@ -5,10 +5,12 @@ import com.bookswap.proposal.domain.ProposalStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.UUID;
 
 /**
@@ -16,6 +18,22 @@ import java.util.UUID;
  * lapsed, {@code EXPIRED} means stored as expired or proposed and lapsed, anything else is an exact match.
  */
 public interface ProposalRepository extends JpaRepository<Proposal, UUID> {
+
+    /**
+     * Cancels every still-proposed proposal (other than {@code exceptProposalId}) that contains any of the copies.
+     * A bulk update, so it bumps {@code version} itself: a concurrent action on one of these proposals then fails
+     * its own version check instead of silently overwriting the cancellation.
+     */
+    @Modifying(flushAutomatically = true)
+    @Query("""
+            update Proposal p set p.status = com.bookswap.proposal.domain.ProposalStatus.CANCELLED,
+                p.cancelCause = com.bookswap.proposal.domain.CancelCause.COPY_UNAVAILABLE,
+                p.updatedAt = :now, p.version = p.version + 1
+            where p.status = com.bookswap.proposal.domain.ProposalStatus.PROPOSED and p.id <> :exceptProposalId
+              and p.id in (select i.id.proposalId from ProposalItem i where i.id.copyId in :copyIds)
+            """)
+    int cancelOpenContaining(@Param("copyIds") Collection<UUID> copyIds,
+                             @Param("exceptProposalId") UUID exceptProposalId, @Param("now") Instant now);
 
     @Query("select p from Proposal p where p.recipientId = :me")
     Page<Proposal> findIncoming(@Param("me") UUID me, Pageable pageable);
