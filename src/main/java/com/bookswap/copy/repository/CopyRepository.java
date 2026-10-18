@@ -7,6 +7,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -20,4 +22,6 @@ public interface CopyRepository extends JpaRepository<Copy, UUID> {
 
     @EntityGraph(attributePaths = "book")
     Optional<Copy> findByIdAndOwnerId(UUID id, UUID ownerId);
+
+    List<Copy> findAllByIdIn(Collection<UUID> ids);
 }

@@ -1,5 +1,6 @@
 package com.bookswap.discovery;
 
+import com.bookswap.support.MarketplaceTestBase;
 import com.bookswap.book.catalog.BookDetails;
 import jakarta.persistence.EntityManagerFactory;
 import org.hibernate.SessionFactory;
@@ -17,7 +18,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-class DiscoveryHardeningIT extends DiscoveryTestBase {
+class DiscoveryHardeningIT extends MarketplaceTestBase {
 
     @Autowired EntityManagerFactory emf;
 

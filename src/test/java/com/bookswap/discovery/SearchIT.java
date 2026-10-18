@@ -1,5 +1,6 @@
 package com.bookswap.discovery;
 
+import com.bookswap.support.MarketplaceTestBase;
 import com.bookswap.book.catalog.BookDetails;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Test;
@@ -14,7 +15,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-class SearchIT extends DiscoveryTestBase {
+class SearchIT extends MarketplaceTestBase {
 
     /** Lists a catalog copy of an arbitrary ISBN with the given title and author. */
     private String listedWith(JsonNode owner, String isbn, String title, String author) throws Exception {

@@ -1,5 +1,6 @@
 package com.bookswap.discovery;
 
+import com.bookswap.support.MarketplaceTestBase;
 import com.bookswap.AbstractIntegrationTest;
 import com.bookswap.book.catalog.BookDetails;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -17,7 +18,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-class FeedIT extends DiscoveryTestBase {
+class FeedIT extends MarketplaceTestBase {
 
     @Test
     void feedShowsOnlyOtherPeoplesAvailableCopiesInTheCallersCity() throws Exception {
