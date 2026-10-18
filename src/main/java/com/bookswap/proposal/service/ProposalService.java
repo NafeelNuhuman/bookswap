@@ -1,5 +1,7 @@
 package com.bookswap.proposal.service;
 
+import com.bookswap.common.web.PageResponse;
+import com.bookswap.common.web.Paging;
 import com.bookswap.copy.domain.Copy;
 import com.bookswap.copy.domain.CopyNotAvailableException;
 import com.bookswap.copy.domain.CopyStatus;
@@ -8,12 +10,18 @@ import com.bookswap.proposal.domain.InvalidProposalException;
 import com.bookswap.proposal.domain.Proposal;
 import com.bookswap.proposal.domain.ProposalItem;
 import com.bookswap.proposal.domain.ProposalNotFoundException;
+import com.bookswap.proposal.domain.ProposalRole;
+import com.bookswap.proposal.domain.ProposalStatus;
 import com.bookswap.proposal.domain.SelfProposalException;
 import com.bookswap.proposal.domain.Side;
 import com.bookswap.proposal.repository.ProposalItemRepository;
 import com.bookswap.proposal.repository.ProposalRepository;
 import com.bookswap.proposal.web.ProposalRequest;
 import com.bookswap.proposal.web.ProposalView;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -62,6 +70,25 @@ public class ProposalService {
     @Transactional(readOnly = true)
     public ProposalView get(UUID me, UUID id) {
         return assembler.toView(load(me, id), me, clock.instant());
+    }
+
+    /** The caller's incoming or outgoing proposals, newest first; list cards never carry contact details. */
+    @Transactional(readOnly = true)
+    public PageResponse<ProposalView> list(UUID me, String role, ProposalStatus status, int page, int size) {
+        ProposalRole inbox = ProposalRole.parse(role);
+        Instant now = clock.instant();
+        Pageable pageable = Paging.pageable(page, size,
+                Sort.by(Sort.Order.desc("createdAt"), Sort.Order.asc("id")));
+        Page<Proposal> result;
+        if (inbox == ProposalRole.INCOMING) {
+            result = status == null ? proposals.findIncoming(me, pageable)
+                    : proposals.findIncomingByStatus(me, status, now, pageable);
+        } else {
+            result = status == null ? proposals.findOutgoing(me, pageable)
+                    : proposals.findOutgoingByStatus(me, status, now, pageable);
+        }
+        List<ProposalView> views = assembler.toViews(result.getContent(), null, now);
+        return PageResponse.from(new PageImpl<>(views, result.getPageable(), result.getTotalElements()));
     }
 
     /**

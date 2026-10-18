@@ -20,6 +20,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -33,6 +36,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -204,6 +208,28 @@ class ProposalServiceTest {
         loads(first, second, mine);
         assertThatThrownBy(() -> service.propose(me, request(List.of(first, second), List.of(mine), null)))
                 .isInstanceOf(InvalidProposalException.class);
+    }
+
+    @Test
+    void listClampsPagingAndSortsNewestFirst() {
+        when(proposals.findIncoming(eq(me), any(Pageable.class))).thenReturn(Page.empty());
+
+        service.list(me, "incoming", null, -5, 100000);
+
+        ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+        verify(proposals).findIncoming(eq(me), pageable.capture());
+        assertThat(pageable.getValue().getPageNumber()).isZero();
+        assertThat(pageable.getValue().getPageSize()).isEqualTo(100);
+        assertThat(pageable.getValue().getSort()).isEqualTo(
+                Sort.by(Sort.Order.desc("createdAt"), Sort.Order.asc("id")));
+    }
+
+    @Test
+    void listUsesTheStatusQueryWhenAStatusIsGiven() {
+        when(proposals.findOutgoingByStatus(eq(me), eq(ProposalStatus.EXPIRED), eq(NOW), any(Pageable.class)))
+                .thenReturn(Page.empty());
+        service.list(me, "OUTGOING", ProposalStatus.EXPIRED, 0, 20);
+        verify(proposals).findOutgoingByStatus(eq(me), eq(ProposalStatus.EXPIRED), eq(NOW), any(Pageable.class));
     }
 
     @Test
