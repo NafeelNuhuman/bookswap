@@ -72,9 +72,14 @@ public abstract class AbstractIntegrationTest {
     }
 
     protected void completeProfile(JsonNode tokens) throws Exception {
+        completeProfile(tokens, "Pat", "Berlin");
+    }
+
+    protected void completeProfile(JsonNode tokens, String displayName, String city) throws Exception {
         mvc.perform(put("/api/users/me").header("Authorization", bearer(tokens))
                         .contentType(APPLICATION_JSON)
-                        .content("{\"displayName\":\"Pat\",\"city\":\"Berlin\",\"postalCode\":\"10115\"}"))
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "displayName", displayName, "city", city, "postalCode", "10115"))))
                 .andExpect(status().isOk());
     }
 
