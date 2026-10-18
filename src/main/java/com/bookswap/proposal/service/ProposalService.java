@@ -105,7 +105,7 @@ public class ProposalService {
                 throw new CopyNotAvailableException();
             }
         }
-        proposal.accept(me, now);
+        proposal.accept(me, now, properties.confirmWindow());
         toReserve.forEach(copy -> copy.reserve(now));
         copies.saveAllAndFlush(toReserve);
         proposals.cancelOpenContaining(itemsByCopy.keySet(), id, now);
@@ -131,12 +131,34 @@ public class ProposalService {
         return assembler.toView(proposal, me, now);
     }
 
+    /**
+     * The proposer withdraws an open proposal, or a party calls off an accepted exchange (see {@link Proposal#cancel});
+     * in that case every reserved copy on both sides goes back on the shelf.
+     */
     @Transactional
     public ProposalView cancel(UUID me, UUID id) {
         Instant now = clock.instant();
-        Proposal proposal = load(me, id);
-        proposal.cancel(me, now);
-        return assembler.toView(proposal, me, now);
+        LockedProposal locked = lockCopiesThenLoad(me, id);
+        if (locked.proposal().cancel(me, now)) {
+            locked.copies().forEach(copy -> copy.release(now));
+            copies.saveAllAndFlush(locked.copies());
+        }
+        return assembler.toView(locked.proposal(), me, now);
+    }
+
+    /** A proposal together with the copies it holds, locked. */
+    record LockedProposal(Proposal proposal, List<Copy> copies) {}
+
+    /**
+     * Locks the proposal's copies exclusively (ascending id order) and only then reads the proposal, so the proposal is
+     * as fresh as the locks and every writer takes copy locks before proposal locks (no deadlocks with accept, unlist
+     * or another confirm). Used by the actions on an already accepted exchange.
+     */
+    LockedProposal lockCopiesThenLoad(UUID me, UUID id) {
+        List<UUID> copyIds = items.findByProposalId(id).stream().map(ProposalItem::getCopyId)
+                .filter(Objects::nonNull).toList();
+        List<Copy> locked = copyIds.isEmpty() ? List.of() : copies.lockForUpdate(copyIds);
+        return new LockedProposal(load(me, id), locked);
     }
 
     /** Called by the copy service, in its transaction, when a copy is regraded, unlisted or removed. */

@@ -131,4 +131,42 @@ class CopyTest {
         }
         assertThat(ConditionGrade.values()).hasSize(5);
     }
+
+    private static Copy withStatus(Copy c, CopyStatus status) throws Exception {
+        Field f = Copy.class.getDeclaredField("status");
+        f.setAccessible(true);
+        f.set(c, status);
+        return c;
+    }
+
+    @Test
+    void releaseMovesReservedBackToAvailable() throws Exception {
+        Copy c = reserved(copy());
+        c.release(T1);
+        assertThat(c.getStatus()).isEqualTo(CopyStatus.AVAILABLE);
+        assertThat(c.getUpdatedAt()).isEqualTo(T1);
+    }
+
+    @Test
+    void transferMovesReservedToTheNewOwnerUnlisted() throws Exception {
+        Copy c = reserved(copy());
+        UUID newOwner = UUID.randomUUID();
+        c.transferTo(newOwner, T1);
+        assertThat(c.getOwnerId()).isEqualTo(newOwner);
+        assertThat(c.getStatus()).isEqualTo(CopyStatus.UNLISTED);
+        assertThat(c.getUpdatedAt()).isEqualTo(T1);
+    }
+
+    @Test
+    void releaseAndTransferNeedAReservedCopy() throws Exception {
+        for (CopyStatus status : new CopyStatus[]{CopyStatus.AVAILABLE, CopyStatus.UNLISTED}) {
+            Copy c = withStatus(copy(), status);
+            UUID owner = c.getOwnerId();
+            assertThatThrownBy(() -> c.release(T1)).as("release from %s", status).isInstanceOf(IllegalStateException.class);
+            assertThatThrownBy(() -> c.transferTo(UUID.randomUUID(), T1)).as("transfer from %s", status)
+                    .isInstanceOf(IllegalStateException.class);
+            assertThat(c.getStatus()).isEqualTo(status);
+            assertThat(c.getOwnerId()).isEqualTo(owner);
+        }
+    }
 }

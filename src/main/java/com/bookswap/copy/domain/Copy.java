@@ -17,7 +17,7 @@ public class Copy implements Persistable<UUID> {
     @Id
     private UUID id;
 
-    @Column(name = "owner_id", nullable = false, updatable = false)
+    @Column(name = "owner_id", nullable = false)
     private UUID ownerId;
 
     @Column(name = "isbn13", nullable = false, updatable = false)
@@ -110,13 +110,34 @@ public class Copy implements Persistable<UUID> {
         this.updatedAt = now;
     }
 
-    /** Taken out of circulation by an accepted proposal. Releasing it again arrives with step 5. */
+    /** Taken out of circulation by an accepted proposal. */
     public void reserve(Instant now) {
         if (status != CopyStatus.AVAILABLE) {
             throw new CopyNotAvailableException();
         }
         this.status = CopyStatus.RESERVED;
         this.updatedAt = now;
+    }
+
+    /** The accepted exchange it was reserved for was called off: back on the shelf. */
+    public void release(Instant now) {
+        requireReserved();
+        this.status = CopyStatus.AVAILABLE;
+        this.updatedAt = now;
+    }
+
+    /** The exchange completed: the copy now belongs to the other party, who decides whether to list it. */
+    public void transferTo(UUID newOwnerId, Instant now) {
+        requireReserved();
+        this.ownerId = newOwnerId;
+        this.status = CopyStatus.UNLISTED;
+        this.updatedAt = now;
+    }
+
+    private void requireReserved() {
+        if (status != CopyStatus.RESERVED) {
+            throw new IllegalStateException("Copy " + id + " is " + status + ", not reserved");
+        }
     }
 
     public void requireRemovable() {

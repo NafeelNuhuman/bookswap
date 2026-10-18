@@ -131,8 +131,9 @@ class ConcurrencyIT extends ProposalTestBase {
 
             List<Integer> statuses = race(List.of(() -> action(bob, id, "accept"), () -> action(alice, id, "cancel")));
 
-            assertThat(successes(statuses)).as("round %d: %s", round, statuses).isEqualTo(1);
-            if (proposalStatus(id).equals("ACCEPTED")) {
+            // an accepted exchange can be called off, so "accept, then cancel" (both succeed) is as valid as "cancel first"
+            assertThat(successes(statuses)).as("round %d: %s", round, statuses).isBetween(1L, 2L);
+            if (successes(statuses) == 1 && proposalStatus(id).equals("ACCEPTED")) {
                 assertThat(List.of(copyStatus(b1), copyStatus(a1))).containsOnly("RESERVED");
             } else {
                 assertThat(proposalStatus(id)).isEqualTo("CANCELLED");

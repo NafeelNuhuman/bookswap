@@ -26,3 +26,4 @@ bookswap:
     read-timeout: 3s
   proposals:
     expiry: 14d
+    confirm-window: 14d

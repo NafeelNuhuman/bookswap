@@ -86,12 +86,14 @@ class RejectCancelIT extends ProposalTestBase {
     }
 
     @Test
-    void cancellingAfterAcceptanceIsNotOpenUntilStep5() throws Exception {
+    void cancellingAfterAcceptanceReleasesEveryCopy() throws Exception {
         String id = propose();
         action(bob, id, "accept").andExpect(status().isOk());
-        action(alice, id, "cancel").andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("PROPOSAL_NOT_OPEN"));
-        assertThat(copyStatus(b1)).isEqualTo("RESERVED");
+        action(alice, id, "cancel").andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"))
+                .andExpect(jsonPath("$.cancelCause").value("WITHDRAWN"));
+        assertThat(copyStatus(b1)).isEqualTo("AVAILABLE");
+        assertThat(copyStatus(a1)).isEqualTo("AVAILABLE");
     }
 
     @Test

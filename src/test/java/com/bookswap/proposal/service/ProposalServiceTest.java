@@ -60,7 +60,7 @@ class ProposalServiceTest {
     @BeforeEach
     void setUp() {
         service = new ProposalService(proposals, items, copies, assembler,
-                new ProposalProperties(Duration.ofDays(14)), Clock.fixed(NOW, ZoneOffset.UTC));
+                new ProposalProperties(Duration.ofDays(14), Duration.ofDays(14)), Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     /** An item as it was stored when the proposal was made: the copy's details, with {@code gradeThen} as the grade. */
