@@ -39,6 +39,34 @@ class SchemaIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void completionSchemaAllowsCompletedStatusNoShowCauseAndAnonymizedUsers() {
+        UUID a = UUID.randomUUID();
+        UUID b = UUID.randomUUID();
+        jdbc.update(INSERT, a, "p@example.com", null, null, null);
+        jdbc.update(INSERT, b, "q@example.com", null, null, null);
+        jdbc.update("""
+                insert into proposal(id, proposer_id, recipient_id, status, cancel_cause, created_at, updated_at, expires_at,
+                    version, accepted_at, confirm_by, proposer_confirmed_at, recipient_confirmed_at, completed_at, pickup_note)
+                values (?, ?, ?, 'COMPLETED', null, now(), now(), now(), 0, now(), now(), now(), now(), now(), 'note')""",
+                UUID.randomUUID(), a, b);
+        jdbc.update("""
+                insert into proposal(id, proposer_id, recipient_id, status, cancel_cause, created_at, updated_at, expires_at, version)
+                values (?, ?, ?, 'CANCELLED', 'NO_SHOW', now(), now(), now(), 0)""", UUID.randomUUID(), a, b);
+
+        UUID gone = UUID.randomUUID();
+        jdbc.update("""
+                insert into users(id, email, password_hash, display_name, created_at, updated_at, version, deleted_at)
+                values (?, 'gone@example.com', 'x', 'Deleted user', now(), now(), 0, now())""", gone);
+        assertThatThrownBy(() -> jdbc.update("""
+                insert into users(id, email, password_hash, display_name, created_at, updated_at, version)
+                values (?, 'half@example.com', 'x', 'Name only', now(), now(), 0)""", UUID.randomUUID()))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThat(jdbc.queryForObject("""
+                select is_nullable from information_schema.columns
+                where table_name = 'proposal_item' and column_name = 'copy_id'""", String.class)).isEqualTo("YES");
+    }
+
+    @Test
     void proposalTablesExistAndAProposalCannotBeToYourself() {
         Integer count = jdbc.queryForObject(
                 "select count(*) from information_schema.tables where table_name in ('proposal','proposal_item')",

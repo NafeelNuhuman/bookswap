@@ -1,6 +1,5 @@
 package com.bookswap.proposal.service;
 
-import com.bookswap.copy.domain.Copy;
 import com.bookswap.proposal.domain.Proposal;
 import com.bookswap.proposal.domain.ProposalStatus;
 import com.bookswap.proposal.domain.Side;
@@ -78,7 +77,7 @@ class ProposalViewAssembler {
     private static List<ProposalView.Item> itemViews(List<ProposalItemRow> rows, Side side) {
         return rows.stream().filter(r -> r.side() == side)
                 .map(r -> new ProposalView.Item(r.copyId(), r.isbn13(), r.title(), r.author(), r.coverUrl(),
-                        r.fromCatalog() ? Copy.DetailsSource.CATALOG : Copy.DetailsSource.MANUAL, r.gradeAtProposal()))
+                        r.detailsSource(), r.gradeAtProposal()))
                 .toList();
     }
 }

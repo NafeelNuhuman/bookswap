@@ -9,19 +9,18 @@ import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
-public interface ProposalItemRepository extends JpaRepository<ProposalItem, ProposalItem.Key> {
+public interface ProposalItemRepository extends JpaRepository<ProposalItem, UUID> {
 
-    List<ProposalItem> findByIdProposalId(UUID proposalId);
+    List<ProposalItem> findByProposalId(UUID proposalId);
 
-    /** The displayed title/author is the shared book's if one exists, otherwise the details typed on the copy. */
+    /** The displayed details are the snapshot taken when the proposal was made, not the copy's current ones. */
     @Query("""
             select new com.bookswap.proposal.repository.ProposalItemRow(
-                i.id.proposalId, i.side, i.id.copyId, i.gradeAtProposal, c.isbn13,
-                coalesce(b.title, c.manualTitle), coalesce(b.author, c.manualAuthor), b.coverUrl,
-                case when b.isbn13 is null then false else true end)
-            from ProposalItem i join Copy c on c.id = i.id.copyId left join c.book b
-            where i.id.proposalId in :proposalIds
-            order by c.createdAt, c.id
+                i.proposalId, i.side, i.copyId, i.gradeAtProposal, i.isbn13, i.title, i.author, i.coverUrl,
+                i.detailsSource)
+            from ProposalItem i
+            where i.proposalId in :proposalIds
+            order by i.proposalId, i.side, i.position
             """)
     List<ProposalItemRow> findRows(@Param("proposalIds") Collection<UUID> proposalIds);
 }

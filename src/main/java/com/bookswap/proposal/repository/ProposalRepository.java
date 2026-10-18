@@ -30,7 +30,7 @@ public interface ProposalRepository extends JpaRepository<Proposal, UUID> {
                 p.cancelCause = com.bookswap.proposal.domain.CancelCause.COPY_UNAVAILABLE,
                 p.updatedAt = :now, p.version = p.version + 1
             where p.status = com.bookswap.proposal.domain.ProposalStatus.PROPOSED and p.id <> :exceptProposalId
-              and p.id in (select i.id.proposalId from ProposalItem i where i.id.copyId in :copyIds)
+              and p.id in (select i.proposalId from ProposalItem i where i.copyId in :copyIds)
             """)
     int cancelOpenContaining(@Param("copyIds") Collection<UUID> copyIds,
                              @Param("exceptProposalId") UUID exceptProposalId, @Param("now") Instant now);

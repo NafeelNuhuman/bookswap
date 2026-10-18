@@ -87,7 +87,12 @@ public class ProposalService {
         proposal.requireAcceptableBy(me, now);
 
         Map<UUID, ProposalItem> itemsByCopy = new HashMap<>();
-        items.findByIdProposalId(id).forEach(i -> itemsByCopy.put(i.getCopyId(), i));
+        for (ProposalItem item : items.findByProposalId(id)) {
+            if (item.getCopyId() == null) {
+                throw new CopyNotAvailableException();
+            }
+            itemsByCopy.put(item.getCopyId(), item);
+        }
         List<Copy> toReserve = copies.lockForUpdate(itemsByCopy.keySet());
         if (toReserve.size() != itemsByCopy.size()) {
             throw new CopyNotAvailableException();
@@ -199,8 +204,12 @@ public class ProposalService {
         Proposal proposal = proposals.save(
                 Proposal.create(proposerId, recipientId, message, parentId, now, properties.expiry()));
         List<ProposalItem> newItems = new ArrayList<>();
-        requested.forEach(c -> newItems.add(new ProposalItem(proposal.getId(), c.getId(), Side.REQUESTED, c.getGrade())));
-        offered.forEach(c -> newItems.add(new ProposalItem(proposal.getId(), c.getId(), Side.OFFERED, c.getGrade())));
+        for (int i = 0; i < requested.size(); i++) {
+            newItems.add(new ProposalItem(proposal.getId(), requested.get(i), Side.REQUESTED, i));
+        }
+        for (int i = 0; i < offered.size(); i++) {
+            newItems.add(new ProposalItem(proposal.getId(), offered.get(i), Side.OFFERED, i));
+        }
         items.saveAll(newItems);
         return assembler.toView(proposal, proposerId, now);
     }

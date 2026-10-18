@@ -63,6 +63,19 @@ class ProposalServiceTest {
                 new ProposalProperties(Duration.ofDays(14)), Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
+    /** An item as it was stored when the proposal was made: the copy's details, with {@code gradeThen} as the grade. */
+    private static ProposalItem item(Proposal p, Copy copy, Side side, ConditionGrade gradeThen) {
+        ProposalItem item = new ProposalItem(p.getId(), copy, side, 0);
+        try {
+            java.lang.reflect.Field f = ProposalItem.class.getDeclaredField("gradeAtProposal");
+            f.setAccessible(true);
+            f.set(item, gradeThen);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException(e);
+        }
+        return item;
+    }
+
     private Copy available(UUID owner, ConditionGrade grade) {
         Copy c = new Copy(owner, book, grade, NOW);
         c.list(true, NOW);
@@ -245,10 +258,10 @@ class ProposalServiceTest {
         Copy mine2 = available(me, ConditionGrade.GOOD);
         Proposal p = proposalFromMeTo(other);
         when(proposals.findById(p.getId())).thenReturn(java.util.Optional.of(p));
-        when(items.findByIdProposalId(p.getId())).thenReturn(List.of(
-                new ProposalItem(p.getId(), requested.getId(), Side.REQUESTED, ConditionGrade.GOOD),
-                new ProposalItem(p.getId(), mine1.getId(), Side.OFFERED, ConditionGrade.GOOD),
-                new ProposalItem(p.getId(), mine2.getId(), Side.OFFERED, ConditionGrade.GOOD)));
+        when(items.findByProposalId(p.getId())).thenReturn(List.of(
+                item(p, requested, Side.REQUESTED, ConditionGrade.GOOD),
+                item(p, mine1, Side.OFFERED, ConditionGrade.GOOD),
+                item(p, mine2, Side.OFFERED, ConditionGrade.GOOD)));
         when(copies.lockForUpdate(anyCollection())).thenReturn(List.of(requested, mine1, mine2));   // the query orders by id
 
         service.accept(other, p.getId());
@@ -270,9 +283,9 @@ class ProposalServiceTest {
         Copy notMineAnymore = available(UUID.randomUUID(), ConditionGrade.GOOD);   // offered, but owned by a third user
         Proposal p = proposalFromMeTo(other);
         when(proposals.findById(p.getId())).thenReturn(java.util.Optional.of(p));
-        when(items.findByIdProposalId(p.getId())).thenReturn(List.of(
-                new ProposalItem(p.getId(), requested.getId(), Side.REQUESTED, ConditionGrade.GOOD),
-                new ProposalItem(p.getId(), notMineAnymore.getId(), Side.OFFERED, ConditionGrade.GOOD)));
+        when(items.findByProposalId(p.getId())).thenReturn(List.of(
+                item(p, requested, Side.REQUESTED, ConditionGrade.GOOD),
+                item(p, notMineAnymore, Side.OFFERED, ConditionGrade.GOOD)));
         when(copies.lockForUpdate(anyCollection())).thenReturn(List.of(requested, notMineAnymore));
 
         assertThatThrownBy(() -> service.accept(other, p.getId())).isInstanceOf(CopyNotAvailableException.class);
@@ -286,9 +299,9 @@ class ProposalServiceTest {
         Copy regraded = available(me, ConditionGrade.POOR);       // was GOOD when the proposal was made
         Proposal p = proposalFromMeTo(other);
         when(proposals.findById(p.getId())).thenReturn(java.util.Optional.of(p));
-        when(items.findByIdProposalId(p.getId())).thenReturn(List.of(
-                new ProposalItem(p.getId(), requested.getId(), Side.REQUESTED, ConditionGrade.GOOD),
-                new ProposalItem(p.getId(), regraded.getId(), Side.OFFERED, ConditionGrade.GOOD)));
+        when(items.findByProposalId(p.getId())).thenReturn(List.of(
+                item(p, requested, Side.REQUESTED, ConditionGrade.GOOD),
+                item(p, regraded, Side.OFFERED, ConditionGrade.GOOD)));
         when(copies.lockForUpdate(anyCollection())).thenReturn(List.of(requested, regraded));
 
         assertThatThrownBy(() -> service.accept(other, p.getId())).isInstanceOf(CopyNotAvailableException.class);
@@ -301,9 +314,9 @@ class ProposalServiceTest {
         Copy mine = available(me, ConditionGrade.GOOD);
         Proposal p = proposalFromMeTo(other);
         when(proposals.findById(p.getId())).thenReturn(java.util.Optional.of(p));
-        when(items.findByIdProposalId(p.getId())).thenReturn(List.of(
-                new ProposalItem(p.getId(), requested.getId(), Side.REQUESTED, ConditionGrade.GOOD),
-                new ProposalItem(p.getId(), mine.getId(), Side.OFFERED, ConditionGrade.GOOD)));
+        when(items.findByProposalId(p.getId())).thenReturn(List.of(
+                item(p, requested, Side.REQUESTED, ConditionGrade.GOOD),
+                item(p, mine, Side.OFFERED, ConditionGrade.GOOD)));
         when(copies.lockForUpdate(anyCollection())).thenAnswer(i -> {
             assertThat(p.getStatus()).as("the proposal is untouched while the copies are being locked")
                     .isEqualTo(ProposalStatus.PROPOSED);
@@ -320,9 +333,9 @@ class ProposalServiceTest {
         Copy requested = available(other, ConditionGrade.GOOD);
         Proposal p = proposalFromMeTo(other);
         when(proposals.findById(p.getId())).thenReturn(java.util.Optional.of(p));
-        when(items.findByIdProposalId(p.getId())).thenReturn(List.of(
-                new ProposalItem(p.getId(), requested.getId(), Side.REQUESTED, ConditionGrade.GOOD),
-                new ProposalItem(p.getId(), UUID.randomUUID(), Side.OFFERED, ConditionGrade.GOOD)));
+        when(items.findByProposalId(p.getId())).thenReturn(List.of(
+                item(p, requested, Side.REQUESTED, ConditionGrade.GOOD),
+                item(p, available(me, ConditionGrade.GOOD), Side.OFFERED, ConditionGrade.GOOD)));
         when(copies.lockForUpdate(anyCollection())).thenReturn(List.of(requested));
         assertThatThrownBy(() -> service.accept(other, p.getId())).isInstanceOf(CopyNotAvailableException.class);
     }

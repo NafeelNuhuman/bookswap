@@ -68,17 +68,20 @@ class CopyChangeIT extends ProposalTestBase {
     }
 
     @Test
-    void removingACopyCancelsProposalsAndDropsItsItemsOnly() throws Exception {
+    void removingACopyCancelsProposalsButAClosedProposalKeepsItsItems() throws Exception {
         String id = proposeOk(alice, List.of(b1, b2), List.of(a1));
 
         mvc.perform(delete("/api/copies/" + b1).header("Authorization", bearer(bob))).andExpect(status().isNoContent());
 
         detail(alice, id).andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("CANCELLED"))
-                .andExpect(jsonPath("$.requested.length()").value(1))
-                .andExpect(jsonPath("$.requested[0].copyId").value(b2))
+                .andExpect(jsonPath("$.requested.length()").value(2))
+                .andExpect(jsonPath("$.requested[0].title").value("Book 1"))
+                .andExpect(jsonPath("$.requested[0].author").value("Author 1"))
+                .andExpect(jsonPath("$.requested[0].copyId").doesNotExist())
+                .andExpect(jsonPath("$.requested[1].copyId").value(b2))
                 .andExpect(jsonPath("$.offered.length()").value(1));
-        assertThat(jdbc.queryForObject("select count(*) from proposal_item where copy_id = ?::uuid", Integer.class, b1)).isZero();
+        assertThat(jdbc.queryForObject("select count(*) from proposal_item where copy_id is null", Integer.class)).isEqualTo(1);
     }
 
     @Test
