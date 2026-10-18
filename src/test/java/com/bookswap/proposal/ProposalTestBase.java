@@ -36,6 +36,12 @@ abstract class ProposalTestBase extends MarketplaceTestBase {
         return read(propose(caller, requested, offered, null).andExpect(status().isCreated())).get("id").asText();
     }
 
+    ResultActions counter(JsonNode caller, String id, List<String> requested, List<String> offered) throws Exception {
+        return mvc.perform(post("/api/proposals/" + id + "/counter").header("Authorization", bearer(caller))
+                .contentType(APPLICATION_JSON).content(objectMapper.writeValueAsString(
+                        Map.of("requestedCopyIds", requested, "offeredCopyIds", offered))));
+    }
+
     ResultActions action(JsonNode caller, String id, String verb) throws Exception {
         return mvc.perform(post("/api/proposals/" + id + "/" + verb).header("Authorization", bearer(caller)));
     }

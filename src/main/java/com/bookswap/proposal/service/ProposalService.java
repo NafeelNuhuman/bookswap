@@ -105,6 +105,17 @@ public class ProposalService {
         return assembler.toView(proposal, me, now);
     }
 
+    /**
+     * The recipient answers with a changed offer: the original becomes {@code COUNTERED} and a new proposal goes the
+     * other way, linked to it. One transaction, so an invalid counter leaves the original open.
+     */
+    @Transactional
+    public ProposalView counter(UUID me, UUID id, ProposalRequest request) {
+        Proposal original = load(me, id);
+        original.markCountered(me, clock.instant());
+        return createProposal(me, original.getProposerId(), original.getId(), request);
+    }
+
     @Transactional
     public ProposalView reject(UUID me, UUID id, String reason) {
         Instant now = clock.instant();

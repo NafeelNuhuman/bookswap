@@ -33,6 +33,13 @@ public class ProposalController {
         return proposalService.accept(UUID.fromString(principal.getName()), id);
     }
 
+    /** Recipient only: answers with a changed offer, which is a new proposal in the other direction. */
+    @PostMapping("/{id}/counter")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ProposalView counter(Principal principal, @PathVariable UUID id, @RequestBody ProposalRequest request) {
+        return proposalService.counter(UUID.fromString(principal.getName()), id, request);
+    }
+
     @PostMapping("/{id}/reject")
     public ProposalView reject(Principal principal, @PathVariable UUID id,
                                @RequestBody(required = false) RejectRequest request) {

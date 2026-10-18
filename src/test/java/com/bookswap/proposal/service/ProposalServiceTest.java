@@ -320,6 +320,38 @@ class ProposalServiceTest {
     }
 
     @Test
+    void counterMarksOriginalAndSavesLinkedProposalWithRolesSwapped() {
+        Copy theirs = available(other, ConditionGrade.GOOD);
+        Copy mine = available(me, ConditionGrade.GOOD);
+        Proposal original = Proposal.create(other, me, null, null, NOW, Duration.ofDays(14));
+        when(proposals.findById(original.getId())).thenReturn(java.util.Optional.of(original));
+        loads(theirs, mine);
+        when(proposals.save(any(Proposal.class))).thenAnswer(i -> i.getArgument(0));
+
+        service.counter(me, original.getId(), request(List.of(theirs), List.of(mine), "how about this"));
+
+        assertThat(original.getStatus()).isEqualTo(ProposalStatus.COUNTERED);
+        ArgumentCaptor<Proposal> saved = ArgumentCaptor.forClass(Proposal.class);
+        verify(proposals).save(saved.capture());
+        assertThat(saved.getValue().getProposerId()).isEqualTo(me);
+        assertThat(saved.getValue().getRecipientId()).isEqualTo(other);
+        assertThat(saved.getValue().getParentId()).isEqualTo(original.getId());
+        assertThat(saved.getValue().getStatus()).isEqualTo(ProposalStatus.PROPOSED);
+    }
+
+    @Test
+    void counterRequestingCopiesOfSomeoneOtherThanTheOriginalProposerIsCopyNotAvailable() {
+        Copy third = available(UUID.randomUUID(), ConditionGrade.GOOD);
+        Copy mine = available(me, ConditionGrade.GOOD);
+        Proposal original = Proposal.create(other, me, null, null, NOW, Duration.ofDays(14));
+        when(proposals.findById(original.getId())).thenReturn(java.util.Optional.of(original));
+        loads(third, mine);
+        assertThatThrownBy(() -> service.counter(me, original.getId(), request(List.of(third), List.of(mine), null)))
+                .isInstanceOf(CopyNotAvailableException.class);
+        verify(proposals, never()).save(any());
+    }
+
+    @Test
     void requestingYourOwnCopiesIsSelfProposal() {
         Copy mine = available(me, ConditionGrade.GOOD);
         Copy alsoMine = available(me, ConditionGrade.GOOD);
