@@ -3,6 +3,7 @@ package com.bookswap.copy.service;
 import com.bookswap.book.domain.Isbn;
 import com.bookswap.book.service.BookService;
 import com.bookswap.common.web.PageResponse;
+import com.bookswap.common.web.Paging;
 import com.bookswap.copy.domain.ConditionGrade;
 import com.bookswap.copy.domain.Copy;
 import com.bookswap.copy.domain.CopyNotFoundException;
@@ -12,7 +13,6 @@ import com.bookswap.copy.web.AddCopyRequest;
 import com.bookswap.copy.web.CopyResponse;
 import com.bookswap.user.service.UserService;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
@@ -28,8 +28,6 @@ import java.util.UUID;
  */
 @Service
 public class CopyService {
-    static final int MAX_PAGE_SIZE = 100;
-
     private final CopyRepository copies;
     private final BookService bookService;
     private final UserService userService;
@@ -55,10 +53,7 @@ public class CopyService {
 
     @Transactional(readOnly = true)
     public PageResponse<CopyResponse> list(UUID ownerId, CopyStatus status, int page, int size) {
-        int pageSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
-        // Spring Data computes the offset as page * size and rejects it above Integer.MAX_VALUE (a 500 otherwise).
-        int pageNumber = Math.min(Math.max(page, 0), Integer.MAX_VALUE / pageSize);
-        Pageable pageable = PageRequest.of(pageNumber, pageSize,
+        Pageable pageable = Paging.pageable(page, size,
                 Sort.by(Sort.Order.desc("createdAt"), Sort.Order.asc("id")));
         Page<Copy> result = status == null
                 ? copies.findByOwnerId(ownerId, pageable)
