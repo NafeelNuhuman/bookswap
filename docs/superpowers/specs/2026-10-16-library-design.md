@@ -17,7 +17,7 @@ New feature packages, each with `web` / `service` / `domain` / `repository`:
 | Endpoint | Behaviour |
 | --- | --- |
 | `GET /api/books/lookup?isbn=` | Validates ISBN (10 or 13, hyphens ok, check digit) -> 400 `INVALID_ISBN`. Returns normalized ISBN-13, title, author, coverUrl, source (`LOCAL` if we already hold the book, else `CATALOG`). Nothing is saved. Not found -> 404 `BOOK_NOT_FOUND`; catalog down/timeout -> 503 `CATALOG_UNAVAILABLE`. Both mean "client offers manual entry". |
-| `POST /api/copies` | `{isbn, grade, title?, author?}` -> 201. Book resolved in order: existing local book (client title/author ignored) -> catalog lookup -> manual title+author; none available -> 400 `BOOK_DETAILS_REQUIRED`. Always creates a new copy (US-07: duplicates allowed). New copies start `UNLISTED`. |
+| `POST /api/copies` | `{isbn, grade, title?, author?}` -> 201. Book resolved in order: existing local book (client title/author ignored) -> catalog lookup (stored as the shared book) -> the caller's `title`+`author`, which are stored **on the copy only**, never in the shared `book` table; none available -> 400 `BOOK_DETAILS_REQUIRED`. Responses carry `detailsSource` (`CATALOG` / `MANUAL`). Always creates a new copy (US-07: duplicates allowed). New copies start `UNLISTED`. |
 | `GET /api/copies?status=&page=&size=` | My copies, paginated (default 20, max 100), newest first, filter by status. |
 | `GET /api/copies/{id}` | One of my copies. |
 | `PUT /api/copies/{id}` | Change grade. |
@@ -27,14 +27,15 @@ New feature packages, each with `web` / `service` / `domain` / `repository`:
 
 Rules: someone else's copy id -> 404 (does not reveal existence); `RESERVED` copies cannot be edited, unlisted or removed -> 409 `COPY_RESERVED`; copy status rules live in `Copy` (one place, unit-tested for every transition, as the spec asks of state logic).
 
-## Data model (`V2__books_and_copies.sql`, `ddl-auto=validate`)
+## Data model (`V2__books_and_copies.sql`, amended by `V3__copy_manual_details.sql`; `ddl-auto=validate`)
 - `book`: `isbn13 varchar(13)` PK (CHECK 13 digits), title varchar(500), author varchar(500), cover_url varchar(1000) nullable (https only), created_at.
-- `copy`: id uuid PK, owner_id FK -> users ON DELETE CASCADE, isbn13 FK -> book, grade, status (CHECK constraints for the allowed values), created_at, updated_at, `version bigint` (`@Version`). Indexes: `(owner_id, status, created_at desc)`, `(isbn13)`.
+- `copy`: id uuid PK, owner_id FK -> users ON DELETE CASCADE, isbn13 (no FK to book since V3), optional manual `title`/`author` (both or neither, non-blank), grade, status (CHECK constraints for the allowed values), created_at, updated_at, `version bigint` (`@Version`). Indexes: `(owner_id, status, created_at desc)`, `(isbn13)`.
+- Display rule: if a shared `book` row exists for a copy's ISBN its details win; the copy's own typed details are shown only while no book row exists, so the catalog takes over automatically and one user's typing never changes what another user sees.
 - Books are never updated or deleted by users; concurrent first-add of the same ISBN is handled with `INSERT ... ON CONFLICT DO NOTHING` then re-read.
 
 ## Catalog adapter
 - `BookCatalog.lookup(Isbn) -> Optional<BookDetails>`; throws `CatalogUnavailableException` on timeout, 5xx or malformed payload.
-- `OpenLibraryCatalog` uses Spring `RestClient`, base URL from `bookswap.catalog.base-url` (default `https://openlibrary.org`), connect 2s / read 3s timeouts, `GET /api/books?bibkeys=ISBN:<isbn13>&format=json&jscmdata=data`. First author name, `cover.medium` if present. Only digits reach the URL (normalized ISBN), so no injection; cover URL accepted only if https.
+- `OpenLibraryCatalog` uses Spring `RestClient`, base URL from `bookswap.catalog.base-url` (default `https://openlibrary.org`), connect 2s / read 3s timeouts, `GET /api/books?bibkeys=ISBN:<isbn13>&format=json&jscmd=data`. First author name, `cover.medium` if present. Only digits reach the URL (normalized ISBN), so no injection; cover URL accepted only if https.
 - No new dependency: tests use `MockRestServiceServer` for the adapter, and a `@Primary` stub `BookCatalog` in integration tests so CI never touches the network.
 
 ## Out of step 2
@@ -47,3 +48,10 @@ Proposal-related cancellations (US-08/09 "cancels proposals") and a real `RESERV
 
 ## Verification
 `mvn -B verify` green; `docker compose up -d`, run the app, in Swagger UI: register, log in, complete profile, look up ISBN 9780140328721 (real Open Library once, manually), add a copy, list it, filter the library by status, edit grade, remove.
+
+## Changes since first approval
+- **Boot upgrade:** Spring Boot 3.5.16, springdoc 2.8.17 (Task 1).
+- **Catalog URL:** the parameter is `jscmd=data` (the originally written `jscmdata=data` is ignored by Open Library); found by a manual smoke test.
+- **Manual details are per-copy (V3):** after the whole-branch review (finding I-2: any user could permanently set the shared book row), typed title/author moved from the shared `book` table onto the copy, as described above.
+- **Paging:** `page` is clamped so `page * size` cannot overflow into a 500 (review finding I-1).
+- Deferred review minors and parked ideas (model-based moderation of manual entries): `docs/superpowers/deferred-minors.md`.
