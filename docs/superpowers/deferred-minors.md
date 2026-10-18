@@ -52,3 +52,19 @@ Ideas discussed and parked: a small-model check of manually entered text before 
 ## Set aside by the reviewer as by design / out of step 2
 
 No catalog caching or rate limiting (each lookup can hold a thread for several seconds); no response size cap on the trusted catalog host; copy insert after the owner is deleted mid-session (account deletion is step 5); catalog-down + no manual details is 400 `BOOK_DETAILS_REQUIRED` (per spec); manual details silently ignored when a book already exists; orphan `book` rows are kept by design; `RESERVED` is only set via SQL in tests until step 4.
+
+# Deferred items from the Step 3 (Discovery) review
+
+Whole-branch review of `0483854..b6ea022`. The one Important finding (Java and PostgreSQL case-fold some non-ASCII letters differently, so cities like "İstanbul" and some search text matched nothing) was fixed by folding case in SQL on both sides, with tests. Open items:
+
+## Minors
+
+1. `GET /api/search` without `q` returns 400 with code `BAD_REQUEST`, while a blank `q` returns `INVALID_QUERY`. Make `q` optional in the controller so the service maps null to `INVALID_QUERY`, and assert the code.
+2. The backslash case in `SearchIT.likeWildcardsAreLiteral` cannot fail (no title contains a backslash). Add a title such as `Foo\bar` and assert `q=\` finds exactly it.
+3. One `FeedIT` ordering assertion relies on two copies having different `created_at` values (random UUID tie-break). Very unlikely to collide; make it deterministic if it ever flakes.
+4. The partial index `copy_available_created_idx` may do little for city-filtered queries; the planner will probably use `users_city_lower_idx` plus the V2 `copy_owner_status_created_idx`. Check with EXPLAIN on realistic data. Substring text search scans the city's available copies; a `pg_trgm` GIN index is the later fix.
+5. Postgres treats backslash as the default LIKE escape, so the explicit `ESCAPE '\'` is redundant there and the ITs cannot detect a mis-rendered ESCAPE clause. Only matters if the database changes.
+
+## Set aside by the reviewer as by design / out of scope
+
+A title that is itself a valid ISBN is searched only as an ISBN (spec); a partial ISBN never matches as part of an ISBN; "newest first" means when the copy was added, not when it was listed (a product question worth revisiting); exact city match only, no aliases (München/Munich) and no Unicode normalization (NFC/NFD); `ownerCity` is shown as typed; `copyId` is exposed and the owner id is not (step 4 will need more); a deleted principal with an explicit `city` still gets results (pre-existing token-lifetime behaviour); no relevance ranking and no grade filter (US-13).
