@@ -6,6 +6,7 @@ import com.bookswap.copy.domain.Copy;
 import com.bookswap.copy.domain.CopyNotAvailableException;
 import com.bookswap.copy.domain.CopyStatus;
 import com.bookswap.copy.repository.CopyRepository;
+import com.bookswap.proposal.domain.ActiveExchangeException;
 import com.bookswap.proposal.domain.InvalidProposalException;
 import com.bookswap.proposal.domain.Proposal;
 import com.bookswap.proposal.domain.ProposalItem;
@@ -257,6 +258,22 @@ public class ProposalService {
     @Transactional
     public void cancelOpenForCopy(UUID copyId, Instant now) {
         proposals.cancelOpenContaining(List.of(copyId), NO_PROPOSAL, now);
+    }
+
+    /** Called by the copy service when an account is deleted: cancels every open proposal containing these copies. */
+    @Transactional
+    public void cancelOpenForCopies(List<UUID> copyIds, Instant now) {
+        if (!copyIds.isEmpty()) {
+            proposals.cancelOpenContaining(copyIds, NO_PROPOSAL, now);
+        }
+    }
+
+    /** Account deletion is refused while the user is a party to an accepted exchange. */
+    @Transactional(readOnly = true)
+    public void requireNoAcceptedExchange(UUID userId) {
+        if (proposals.existsAcceptedFor(userId)) {
+            throw new ActiveExchangeException();
+        }
     }
 
     /** The caller's incoming or outgoing proposals, newest first; list cards never carry contact details. */

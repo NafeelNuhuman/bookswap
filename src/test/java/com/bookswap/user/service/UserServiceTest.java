@@ -81,14 +81,14 @@ class UserServiceTest {
     @Test
     void requireExistsPassesForAKnownUser() {
         UUID id = UUID.randomUUID();
-        when(users.existsById(id)).thenReturn(true);
+        when(users.existsByIdAndDeletedAtIsNull(id)).thenReturn(true);
         service().requireExists(id);
     }
 
     @Test
     void requireExistsThrowsForUnknownId() {
         UUID id = UUID.randomUUID();
-        when(users.existsById(id)).thenReturn(false);
+        when(users.existsByIdAndDeletedAtIsNull(id)).thenReturn(false);
         assertThatThrownBy(() -> service().requireExists(id)).isInstanceOf(UserNotFoundException.class);
     }
 }

@@ -36,6 +36,11 @@ public interface CopyRepository extends JpaRepository<Copy, UUID> {
     @Query("select c from Copy c where c.id in :ids order by c.id")
     List<Copy> lockForShare(@Param("ids") Collection<UUID> ids);
 
+    /** All of one owner's copies, locked exclusively in ascending id order (account deletion). */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select c from Copy c where c.ownerId = :ownerId order by c.id")
+    List<Copy> lockAllOwnedBy(@Param("ownerId") UUID ownerId);
+
     /** Reads the copies and takes exclusive row locks, in ascending id order, so competing accepts cannot deadlock. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select c from Copy c where c.id in :ids order by c.id")

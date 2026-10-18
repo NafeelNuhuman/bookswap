@@ -59,6 +59,12 @@ public class RefreshTokenService {
         return token.getUserId();
     }
 
+    /** Account deletion: forgets every login token of the user. */
+    @Transactional
+    public void deleteAll(UUID userId) {
+        repository.deleteAllForUser(userId);
+    }
+
     public static String hash(String raw) {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256").digest(raw.getBytes(StandardCharsets.UTF_8));

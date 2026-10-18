@@ -8,6 +8,7 @@ import java.util.UUID;
 @Entity
 @Table(name = "users")
 public class User {
+    public static final String DELETED_DISPLAY_NAME = "Deleted user";
 
     @Id
     private UUID id;
@@ -35,6 +36,9 @@ public class User {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
+
     @Version
     private Long version;
 
@@ -56,8 +60,27 @@ public class User {
         this.updatedAt = now;
     }
 
+    /**
+     * Account deletion keeps the row (other people's history points at it) but erases everything personal: the email
+     * becomes a placeholder nobody can use to log in, and the password hash can match nothing.
+     */
+    public void anonymize(Instant now) {
+        this.email = "deleted-" + id + "@deleted.invalid";
+        this.passwordHash = "!deleted";
+        this.displayName = DELETED_DISPLAY_NAME;
+        this.city = null;
+        this.postalCode = null;
+        this.contactNote = null;
+        this.deletedAt = now;
+        this.updatedAt = now;
+    }
+
+    public boolean isDeleted() {
+        return deletedAt != null;
+    }
+
     public boolean isProfileComplete() {
-        return notBlank(displayName) && notBlank(city) && notBlank(postalCode);
+        return deletedAt == null && notBlank(displayName) && notBlank(city) && notBlank(postalCode);
     }
 
     private static boolean notBlank(String s) {

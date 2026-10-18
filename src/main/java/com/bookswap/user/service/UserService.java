@@ -41,12 +41,13 @@ public class UserService {
 
     @Transactional(readOnly = true)
     public void requireExists(UUID id) {
-        if (!users.existsById(id)) {
+        if (!users.existsByIdAndDeletedAtIsNull(id)) {
             throw new UserNotFoundException();
         }
     }
 
+    /** A deleted (anonymized) account is gone as far as its own, still unexpired, access token is concerned. */
     private User load(UUID id) {
-        return users.findById(id).orElseThrow(UserNotFoundException::new);
+        return users.findById(id).filter(u -> !u.isDeleted()).orElseThrow(UserNotFoundException::new);
     }
 }

@@ -54,6 +54,13 @@ public interface ProposalRepository extends JpaRepository<Proposal, UUID> {
             """)
     List<UUID> findOverdueAccepted(@Param("now") Instant now, @Param("skip") Collection<UUID> skip, Pageable limit);
 
+    @Query("""
+            select count(p) > 0 from Proposal p
+            where p.status = com.bookswap.proposal.domain.ProposalStatus.ACCEPTED
+              and (p.proposerId = :userId or p.recipientId = :userId)
+            """)
+    boolean existsAcceptedFor(@Param("userId") UUID userId);
+
     /** The user's completed exchanges, as either party. */
     @Query("""
             select p from Proposal p

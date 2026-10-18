@@ -20,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -102,6 +103,20 @@ public class CopyService {
         copy.requireRemovable();
         proposals.cancelOpenForCopy(copy.getId(), clock.instant());
         copies.delete(copy);
+    }
+
+    /**
+     * Account deletion: removes every copy of the owner. The copies are locked first (so an accept racing this either
+     * wins and the deletion is refused, or finds the copies gone), then the owner must have no accepted exchange,
+     * then the open proposals containing the copies are cancelled and the copies deleted.
+     */
+    @Transactional
+    public void removeAll(UUID ownerId) {
+        List<Copy> owned = copies.lockAllOwnedBy(ownerId);
+        proposals.requireNoAcceptedExchange(ownerId);
+        proposals.cancelOpenForCopies(owned.stream().map(Copy::getId).toList(), clock.instant());
+        copies.deleteAll(owned);
+        copies.flush();   // later bulk statements clear the persistence context; the deletes must already be written
     }
 
     private Copy load(UUID ownerId, UUID id) {
