@@ -1,6 +1,5 @@
 package com.bookswap.copy.service;
 
-import com.bookswap.book.domain.Book;
 import com.bookswap.book.domain.Isbn;
 import com.bookswap.book.service.BookService;
 import com.bookswap.common.web.PageResponse;
@@ -46,8 +45,12 @@ public class CopyService {
     /** Not @Transactional: resolving the book may call the catalog over HTTP. */
     public CopyResponse add(UUID ownerId, AddCopyRequest request) {
         Isbn isbn = Isbn.parse(request.isbn());
-        Book book = bookService.resolveForCopy(isbn, request.title(), request.author());
-        return CopyResponse.from(copies.save(new Copy(ownerId, book, request.grade(), clock.instant())));
+        BookService.BookResolution resolved = bookService.resolveForCopy(isbn, request.title(), request.author());
+        Copy copy = resolved.book() != null
+                ? new Copy(ownerId, resolved.book(), request.grade(), clock.instant())
+                : Copy.withManualDetails(ownerId, resolved.isbn13(), resolved.manualTitle(), resolved.manualAuthor(),
+                        request.grade(), clock.instant());
+        return CopyResponse.from(copies.save(copy));
     }
 
     @Transactional(readOnly = true)

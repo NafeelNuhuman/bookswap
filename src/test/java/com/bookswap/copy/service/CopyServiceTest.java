@@ -62,7 +62,8 @@ class CopyServiceTest {
 
     @Test
     void addResolvesTheBookAndSavesAnUnlistedCopyForTheCaller() {
-        when(bookService.resolveForCopy(any(Isbn.class), eq("T"), eq("A"))).thenReturn(book);
+        when(bookService.resolveForCopy(any(Isbn.class), eq("T"), eq("A")))
+                .thenReturn(new BookService.BookResolution(book, book.getIsbn13(), null, null));
         when(copies.save(any(Copy.class))).thenAnswer(i -> i.getArgument(0));
 
         CopyResponse r = service.add(owner, new AddCopyRequest("978-0-14-032872-1", ConditionGrade.NEW, "T", "A"));
@@ -73,6 +74,20 @@ class CopyServiceTest {
         assertThat(saved.getValue().getStatus()).isEqualTo(CopyStatus.UNLISTED);
         assertThat(r.isbn()).isEqualTo("9780140328721");
         assertThat(r.grade()).isEqualTo(ConditionGrade.NEW);
+    }
+
+    @Test
+    void addWithManualDetailsSavesACopyCarryingThemAndNoBook() {
+        when(bookService.resolveForCopy(any(Isbn.class), eq("T"), eq("A")))
+                .thenReturn(new BookService.BookResolution(null, "9780140328721", "T", "A"));
+        when(copies.save(any(Copy.class))).thenAnswer(i -> i.getArgument(0));
+
+        CopyResponse r = service.add(owner, new AddCopyRequest("9780140328721", ConditionGrade.GOOD, "T", "A"));
+
+        assertThat(r.title()).isEqualTo("T");
+        assertThat(r.author()).isEqualTo("A");
+        assertThat(r.detailsSource()).isEqualTo(Copy.DetailsSource.MANUAL);
+        assertThat(r.isbn()).isEqualTo("9780140328721");
     }
 
     @Test

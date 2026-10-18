@@ -86,35 +86,44 @@ class BookServiceTest {
     void existingLocalBookIsReusedAndNeitherCatalogNorManualDataIsUsed() {
         Book local = stored("Local", "L", null);
         when(books.findById(ISBN.value())).thenReturn(Optional.of(local));
-        assertThat(service.resolveForCopy(ISBN, "Ignored", "Ignored")).isSameAs(local);
+        BookService.BookResolution r = service.resolveForCopy(ISBN, "Ignored", "Ignored");
+        assertThat(r.book()).isSameAs(local);
+        assertThat(r.manualTitle()).isNull();
         verifyNoInteractions(catalog);
         verify(books, never()).insertIfAbsent(anyString(), anyString(), anyString(), any(), any());
     }
 
     @Test
-    void catalogDetailsAreStoredAndManualDataIsIgnored() {
+    void catalogDetailsAreStoredSharedAndManualDataIsIgnored() {
         Book saved = stored("Cat", "C", null);
         when(books.findById(ISBN.value())).thenReturn(Optional.empty(), Optional.of(saved));
         when(catalog.lookup(ISBN)).thenReturn(Optional.of(new BookDetails("Cat", "C", null)));
-        assertThat(service.resolveForCopy(ISBN, "Manual", "M")).isSameAs(saved);
+        BookService.BookResolution r = service.resolveForCopy(ISBN, "Manual", "M");
+        assertThat(r.book()).isSameAs(saved);
+        assertThat(r.manualTitle()).isNull();
         verify(books).insertIfAbsent(ISBN.value(), "Cat", "C", null, NOW);
     }
 
     @Test
-    void manualDetailsAreUsedWhenTheCatalogHasNothing() {
-        Book saved = stored("Manual", "M", null);
-        when(books.findById(ISBN.value())).thenReturn(Optional.empty(), Optional.of(saved));
+    void manualDetailsAreReturnedForTheCopyAndNeverStoredInTheSharedBookTable() {
+        when(books.findById(ISBN.value())).thenReturn(Optional.empty());
         when(catalog.lookup(ISBN)).thenReturn(Optional.empty());
-        assertThat(service.resolveForCopy(ISBN, "Manual", "M")).isSameAs(saved);
-        verify(books).insertIfAbsent(ISBN.value(), "Manual", "M", null, NOW);
+        BookService.BookResolution r = service.resolveForCopy(ISBN, "Manual", "M");
+        assertThat(r.book()).isNull();
+        assertThat(r.isbn13()).isEqualTo(ISBN.value());
+        assertThat(r.manualTitle()).isEqualTo("Manual");
+        assertThat(r.manualAuthor()).isEqualTo("M");
+        verify(books, never()).insertIfAbsent(anyString(), anyString(), anyString(), any(), any());
     }
 
     @Test
-    void manualDetailsAreUsedWhenTheCatalogIsDown() {
-        Book saved = stored("Manual", "M", null);
-        when(books.findById(ISBN.value())).thenReturn(Optional.empty(), Optional.of(saved));
+    void manualDetailsAreUsedWhenTheCatalogIsDownAndStillNotStoredShared() {
+        when(books.findById(ISBN.value())).thenReturn(Optional.empty());
         when(catalog.lookup(ISBN)).thenThrow(new CatalogUnavailableException());
-        assertThat(service.resolveForCopy(ISBN, "Manual", "M")).isSameAs(saved);
+        BookService.BookResolution r = service.resolveForCopy(ISBN, "Manual", "M");
+        assertThat(r.book()).isNull();
+        assertThat(r.manualTitle()).isEqualTo("Manual");
+        verify(books, never()).insertIfAbsent(anyString(), anyString(), anyString(), any(), any());
     }
 
     @Test

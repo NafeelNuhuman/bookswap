@@ -108,6 +108,43 @@ class CopyLibraryIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void manualDetailsStayOnTheCopyAndNeverEnterTheSharedBook() throws Exception {
+        JsonNode alice = registerAndLogin("alice-m@example.com", "password123");
+        JsonNode bob = registerAndLogin("bob-m@example.com", "password123");
+
+        // The catalog is down, so Alice types the details herself.
+        catalog.down(true);
+        String aliceCopy = read(add(alice, Map.of("isbn", FOX, "grade", "GOOD", "title", "fantsastic mr fox", "author", "roald dal"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.title").value("fantsastic mr fox"))
+                .andExpect(jsonPath("$.detailsSource").value("MANUAL"))).get("id").asText();
+        assertThat(jdbc.queryForObject("select count(*) from book", Integer.class))
+                .as("manual details must not create a shared book row").isZero();
+
+        // Bob is unaffected by Alice's typos.
+        send(get("/api/books/lookup").param("isbn", FOX), bob).andExpect(status().isServiceUnavailable());
+
+        // Once the catalog knows the book, the first catalog-backed add creates the shared row ...
+        catalog.down(false);
+        catalog.put(FOX, FOX_DETAILS);
+        add(bob, Map.of("isbn", FOX, "grade", "POOR"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.title").value("Fantastic Mr Fox"))
+                .andExpect(jsonPath("$.detailsSource").value("CATALOG"));
+
+        // ... and Alice's copy now shows the catalog's details instead of her typed ones.
+        send(get("/api/copies/" + aliceCopy), alice)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("Fantastic Mr Fox"))
+                .andExpect(jsonPath("$.author").value("Roald Dahl"))
+                .andExpect(jsonPath("$.detailsSource").value("CATALOG"));
+        send(get("/api/copies"), alice)
+                .andExpect(jsonPath("$.content[0].title").value("Fantastic Mr Fox"));
+        assertThat(jdbc.queryForObject("select title from copy where id = ?::uuid", String.class, aliceCopy))
+                .as("the typed details are kept on the copy").isEqualTo("fantsastic mr fox");
+    }
+
+    @Test
     void invalidInputsGivePerFieldOrIsbnErrors() throws Exception {
         JsonNode tokens = registerAndLogin("a5@example.com", "password123");
 

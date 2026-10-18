@@ -43,11 +43,15 @@ public class BookService {
                 LookupResponse.Source.CATALOG);
     }
 
-    /** Local book first, then the catalog, then the caller's manual title and author. */
-    public Book resolveForCopy(Isbn isbn, String manualTitle, String manualAuthor) {
+    /**
+     * What a new copy should point at: the shared book (local row first, then the catalog, which is stored for
+     * everyone), or, only when neither knows the ISBN, the owner's own typed details, which are NOT stored in
+     * the shared book table.
+     */
+    public BookResolution resolveForCopy(Isbn isbn, String manualTitle, String manualAuthor) {
         Optional<Book> local = books.findById(isbn.value());
         if (local.isPresent()) {
-            return local.get();
+            return BookResolution.shared(local.get());
         }
         Optional<BookDetails> fromCatalog = Optional.empty();
         try {
@@ -55,13 +59,28 @@ public class BookService {
         } catch (CatalogUnavailableException e) {
             log.warn("Catalog unavailable while adding {}; falling back to manual details", isbn);
         }
-        BookDetails details = fromCatalog.orElseGet(() -> manual(manualTitle, manualAuthor));
-        if (details == null) {
+        if (fromCatalog.isPresent()) {
+            BookDetails details = fromCatalog.get();
+            books.insertIfAbsent(isbn.value(), details.title(), details.author(), details.coverUrl(), clock.instant());
+            // Re-read: a concurrent insert of the same ISBN may have won, and the stored row is the truth.
+            return BookResolution.shared(books.findById(isbn.value()).orElseThrow());
+        }
+        BookDetails manual = manual(manualTitle, manualAuthor);
+        if (manual == null) {
             throw new BookDetailsRequiredException();
         }
-        books.insertIfAbsent(isbn.value(), details.title(), details.author(), details.coverUrl(), clock.instant());
-        // Re-read: a concurrent insert of the same ISBN may have won, and the stored row is the truth.
-        return books.findById(isbn.value()).orElseThrow();
+        return BookResolution.manual(isbn.value(), manual.title(), manual.author());
+    }
+
+    /** Either a shared {@link Book}, or the owner's own title/author for an ISBN no shared book exists for. */
+    public record BookResolution(Book book, String isbn13, String manualTitle, String manualAuthor) {
+        static BookResolution shared(Book book) {
+            return new BookResolution(book, book.getIsbn13(), null, null);
+        }
+
+        static BookResolution manual(String isbn13, String title, String author) {
+            return new BookResolution(null, isbn13, title, author);
+        }
     }
 
     private static BookDetails manual(String title, String author) {

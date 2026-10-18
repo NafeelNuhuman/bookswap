@@ -64,6 +64,44 @@ class CopyHardeningIT extends AbstractIntegrationTest {
         assertThat(small).as("one page query + one count query").isLessThanOrEqualTo(2);
     }
 
+    @Test
+    void queryCountStaysFlatWhenManualAndCatalogCopiesAreMixed() throws Exception {
+        JsonNode tokens = registerAndLogin("n2@example.com", "password123");
+        for (int i = 1; i <= 12; i++) {
+            if (i % 2 == 0) {
+                catalog.put(valid(i), new BookDetails("Book " + i, "Author " + i, null));
+            } // odd ISBNs are unknown to the catalog, so they become manual copies without a book row
+            mvc.perform(post("/api/copies").header("Authorization", bearer(tokens)).contentType(APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(Map.of("isbn", valid(i), "grade", "GOOD",
+                                    "title", "Typed " + i, "author", "Me"))))
+                    .andExpect(status().isCreated());
+        }
+        assertThat(jdbc.queryForObject("select count(*) from book", Integer.class)).isEqualTo(6);
+        Statistics stats = emf.unwrap(SessionFactory.class).getStatistics();
+
+        long small = statementsFor(tokens, 5, stats);
+        long large = statementsFor(tokens, 10, stats);
+
+        assertThat(large).as("statements for size=10 vs size=5").isEqualTo(small);
+        assertThat(small).isLessThanOrEqualTo(2);
+    }
+
+    @Test
+    void databaseRejectsInconsistentManualDetails() throws Exception {
+        addFox(registerAndLogin("md@example.com", "password123"));
+
+        assertThatThrownBy(() -> jdbc.update("update copy set title = 'T'"))
+                .as("title without author").isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbc.update("update copy set title = '  ', author = 'A'"))
+                .as("blank title").isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbc.update("update copy set isbn13 = '123'"))
+                .as("non-ISBN-13 value").isInstanceOf(DataIntegrityViolationException.class);
+        // a copy for an ISBN with no book row is legal (that is what a manual copy is)
+        assertThat(jdbc.update("insert into copy (id, owner_id, isbn13, grade, status, title, author, created_at, updated_at, version) "
+                + "select gen_random_uuid(), owner_id, '9790000000001', 'GOOD', 'UNLISTED', 'T', 'A', now(), now(), 0 from copy limit 1"))
+                .isEqualTo(1);
+    }
+
     private long statementsFor(JsonNode tokens, int size, Statistics stats) throws Exception {
         stats.clear();
         mvc.perform(get("/api/copies").param("size", String.valueOf(size)).header("Authorization", bearer(tokens)))

@@ -36,6 +36,27 @@ class CopyTest {
     }
 
     @Test
+    void manualCopyCarriesItsOwnDetailsAndFollowsTheSameRules() {
+        Copy c = Copy.withManualDetails(UUID.randomUUID(), "9780140328721", "Typed", "Me", ConditionGrade.GOOD, T0);
+        assertThat(c.getTitle()).isEqualTo("Typed");
+        assertThat(c.getAuthor()).isEqualTo("Me");
+        assertThat(c.getCoverUrl()).isNull();
+        assertThat(c.getIsbn13()).isEqualTo("9780140328721");
+        assertThat(c.getDetailsSource()).isEqualTo(Copy.DetailsSource.MANUAL);
+        assertThat(c.getStatus()).isEqualTo(CopyStatus.UNLISTED);
+        assertThatThrownBy(() -> c.list(false, T1)).isInstanceOf(ProfileIncompleteException.class);
+        c.list(true, T1);
+        assertThat(c.getStatus()).isEqualTo(CopyStatus.AVAILABLE);
+    }
+
+    @Test
+    void catalogCopyReportsTheBooksDetails() {
+        Copy c = copy();
+        assertThat(c.getTitle()).isEqualTo("Fantastic Mr Fox");
+        assertThat(c.getDetailsSource()).isEqualTo(Copy.DetailsSource.CATALOG);
+    }
+
+    @Test
     void listingRequiresACompleteProfile() {
         Copy c = copy();
         assertThatThrownBy(() -> c.list(false, T1)).isInstanceOf(ProfileIncompleteException.class);
