@@ -22,6 +22,16 @@ class OpenApiIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void apiDocsListTheCompletionEndpoints() throws Exception {
+        mvc.perform(get("/v3/api-docs"))
+                .andExpect(jsonPath("$.paths['/api/proposals/{id}/confirm'].post").exists())
+                .andExpect(jsonPath("$.paths['/api/proposals/{id}/cancel'].post").exists())
+                .andExpect(jsonPath("$.paths['/api/proposals/{id}/pickup-note'].put").exists())
+                .andExpect(jsonPath("$.paths['/api/exchanges'].get").exists())
+                .andExpect(jsonPath("$.paths['/api/users/me'].delete").exists());
+    }
+
+    @Test
     void swaggerUiIsNotBehindAuthentication() throws Exception {
         mvc.perform(get("/swagger-ui.html"))
                 .andExpect(result -> assertThat(result.getResponse().getStatus()).isNotIn(401, 403));

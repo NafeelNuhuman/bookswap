@@ -93,3 +93,26 @@ Whole-branch review of `367df92..4f33b9d` by a fresh most-capable-model reviewer
 
 No rate limiting or request-size limit on propose (app-wide); malformed JSON gives `MALFORMED_REQUEST` rather than `INVALID_PROPOSAL` (existing handler); a counter requesting the counterer's own copies is `SELF_PROPOSAL` (author's ruling, agreed); "requested copies must share an owner" is a 400 rather than 409 (nothing probeable: those copies are public in the feed); message length counts UTF-16 units (strict side).
 
+
+---
+
+# Step 5 (Completion and housekeeping): status of earlier items and new open items
+
+Closed by step 5: the step 4 ruling about removed copies (items now keep their own snapshot of the book, so a closed
+proposal or a completed exchange keeps what changed hands); step 4 minor 2 (`proposal.parent_id` index, V6); step 4
+minor 6 (a user row is never removed, only anonymized, so the assembler never meets a vanished user).
+
+Open:
+
+1. `cancelOpenContaining` still also cancels proposals stored `PROPOSED` but already lapsed (step 4 minor 1); the hourly
+   job now persists `EXPIRED` quickly, so the window is short.
+2. A deleted user's access token stays valid for the rest of its 15 minutes on every endpoint that does not load the
+   user (the profile and shelf calls answer 404, but for example adding a copy would still work for that time).
+3. Account deletion anonymizes instead of deleting the `users` row; this is deliberate (other people's history points at
+   it) but means "personal data erased" holds for the profile fields, email and password hash, not for the row's id.
+4. A confirm or cancel on a proposal id the caller is not a party to takes (and immediately releases) row locks on the
+   proposal's copies before answering 404.
+5. The housekeeping job is a plain `@Scheduled` method: with more than one application instance it would run on each
+   (harmless, it is idempotent and per-proposal transactional, but wasteful); add a lock if the app is ever scaled out.
+6. Releasing or transferring a copy that is not reserved throws `IllegalStateException` (an invariant violation, not
+   user input); the job logs and skips such an exchange, an interactive call would answer 500.

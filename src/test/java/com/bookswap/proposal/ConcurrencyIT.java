@@ -1,6 +1,8 @@
 package com.bookswap.proposal;
 
+import com.bookswap.proposal.service.ProposalHousekeeping;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.web.servlet.ResultActions;
 
 import java.util.ArrayList;
@@ -14,6 +16,9 @@ import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 
@@ -86,6 +91,146 @@ class ConcurrencyIT extends ProposalTestBase {
                     select 1 from proposal_item pi join proposal p on p.id = pi.proposal_id
                     where pi.copy_id = c.id and p.status = 'ACCEPTED')""", Integer.class))
                 .as("reserved copies without an accepted proposal").isZero();
+        assertThat(jdbc.queryForObject("""
+                select count(*) from proposal_item pi join proposal p on p.id = pi.proposal_id
+                join copy c on c.id = pi.copy_id where p.status = 'COMPLETED' and c.status = 'RESERVED'""", Integer.class))
+                .as("completed exchanges holding a reserved copy").isZero();
+        assertThat(jdbc.queryForObject("""
+                select count(*) from proposal_item pi join proposal p on p.id = pi.proposal_id
+                join copy c on c.id = pi.copy_id where p.status = 'COMPLETED'
+                  and ((pi.side = 'OFFERED' and c.owner_id <> p.recipient_id)
+                    or (pi.side = 'REQUESTED' and c.owner_id <> p.proposer_id))""", Integer.class))
+                .as("completed exchanges whose copies did not change hands").isZero();
+    }
+
+    // ---- completion ----
+
+    @Autowired ProposalHousekeeping housekeeping;
+
+    private String[] acceptedSwap(int n) throws Exception {
+        String b = addListed(bob, n, "Book " + n);
+        String a = addListed(alice, n + 100, "Book " + (n + 100));
+        String id = proposeOk(alice, List.of(b), List.of(a));
+        action(bob, id, "accept").andExpect(status().isOk());
+        return new String[]{id, b, a};
+    }
+
+    @Test
+    void bothPartiesConfirmingAtOnceCompleteTheExchangeOnce() throws Exception {
+        long deadlocksBefore = deadlocks();
+        for (int round = 0; round < ROUNDS; round++) {
+            String[] swap = acceptedSwap(round * 2 + 1);
+
+            List<Integer> statuses = race(List.of(() -> action(alice, swap[0], "confirm"), () -> action(bob, swap[0], "confirm")));
+
+            assertThat(statuses).as("round %d", round).containsExactly(200, 200);
+            assertThat(proposalStatus(swap[0])).isEqualTo("COMPLETED");
+            assertThat(copyStatus(swap[1])).isEqualTo("UNLISTED");
+            assertThat(copyStatus(swap[2])).isEqualTo("UNLISTED");
+            assertConsistent();
+        }
+        assertThat(deadlocks()).as("confirm locks copies before the proposal").isEqualTo(deadlocksBefore);
+    }
+
+    @Test
+    void confirmingRacingTheOtherPartysCancelIsConsistent() throws Exception {
+        for (int round = 0; round < ROUNDS; round++) {
+            String[] swap = acceptedSwap(round * 2 + 1);
+
+            List<Integer> statuses = race(List.of(() -> action(alice, swap[0], "confirm"), () -> action(bob, swap[0], "cancel")));
+
+            assertThat(statuses.get(1)).as("the non-confirmer may always cancel: round %d %s", round, statuses).isEqualTo(200);
+            assertThat(statuses.get(0)).isIn(200, 409);
+            assertThat(proposalStatus(swap[0])).isEqualTo("CANCELLED");
+            assertThat(List.of(copyStatus(swap[1]), copyStatus(swap[2]))).containsOnly("AVAILABLE");
+            assertConsistent();
+        }
+    }
+
+    @Test
+    void theSecondConfirmationRacingItsOwnersCancelHasExactlyOneWinner() throws Exception {
+        for (int round = 0; round < ROUNDS; round++) {
+            String[] swap = acceptedSwap(round * 2 + 1);
+            action(alice, swap[0], "confirm").andExpect(status().isOk());
+
+            List<Integer> statuses = race(List.of(() -> action(bob, swap[0], "confirm"), () -> action(bob, swap[0], "cancel")));
+
+            assertThat(successes(statuses)).as("round %d: %s", round, statuses).isEqualTo(1);
+            if (proposalStatus(swap[0]).equals("COMPLETED")) {
+                assertThat(List.of(copyStatus(swap[1]), copyStatus(swap[2]))).containsOnly("UNLISTED");
+            } else {
+                assertThat(proposalStatus(swap[0])).isEqualTo("CANCELLED");
+                assertThat(List.of(copyStatus(swap[1]), copyStatus(swap[2]))).containsOnly("AVAILABLE");
+            }
+            assertConsistent();
+        }
+    }
+
+    @Test
+    void theConfirmerCancellingWhileTheOtherPartyCompletesNeverUndoesTheCompletion() throws Exception {
+        for (int round = 0; round < ROUNDS; round++) {
+            String[] swap = acceptedSwap(round * 2 + 1);
+            action(alice, swap[0], "confirm").andExpect(status().isOk());
+
+            List<Integer> statuses = race(List.of(() -> action(bob, swap[0], "confirm"), () -> action(alice, swap[0], "cancel")));
+
+            assertThat(statuses).as("round %d", round).containsExactly(200, statuses.get(1));
+            assertThat(statuses.get(1)).isIn(403, 409);
+            assertThat(proposalStatus(swap[0])).isEqualTo("COMPLETED");
+            assertConsistent();
+        }
+    }
+
+    @Test
+    void housekeepingRacingALateConfirmSettlesOnce() throws Exception {
+        for (int round = 0; round < ROUNDS; round++) {
+            String[] swap = acceptedSwap(round * 2 + 1);
+            action(alice, swap[0], "confirm").andExpect(status().isOk());
+            jdbc.update("update proposal set confirm_by = now() - interval '1 minute' where id = ?::uuid", swap[0]);
+
+            List<Integer> statuses = race(List.of(() -> action(bob, swap[0], "confirm"), () -> {
+                housekeeping.run();
+                return mvc.perform(get("/v3/api-docs"));
+            }));
+
+            assertThat(statuses.get(0)).as("round %d", round).isEqualTo(409);
+            assertThat(proposalStatus(swap[0])).isEqualTo("COMPLETED");
+            assertThat(copyStatus(swap[1])).isEqualTo("UNLISTED");
+            assertConsistent();
+        }
+    }
+
+    @Test
+    void deletingTheAccountRacingAnAcceptIsConsistent() throws Exception {
+        long deadlocksBefore = deadlocks();
+        for (int round = 0; round < ROUNDS; round++) {
+            jdbc.execute("TRUNCATE copy, book, refresh_token, users CASCADE");
+            users();
+            String b = addListed(bob, 1, "Book 1");
+            String a = addListed(alice, 3, "Book 3");
+            String id = proposeOk(alice, List.of(b), List.of(a));
+
+            List<Integer> statuses = race(List.of(() -> action(bob, id, "accept"),
+                    () -> mvc.perform(delete("/api/users/me").header("Authorization", bearer(bob))
+                            .contentType(APPLICATION_JSON).content("{\"password\":\"password123\"}"))));
+
+            assertThat(successes(statuses) + (statuses.get(1) == 204 ? 1 : 0)).as("round %d: %s", round, statuses).isEqualTo(1);
+            boolean deleted = jdbc.queryForObject("select count(*) from users where email like 'deleted-%'", Integer.class) == 1;
+            if (deleted) {
+                assertThat(statuses.get(1)).isEqualTo(204);
+                assertThat(statuses.get(0)).isEqualTo(409);
+                assertThat(proposalStatus(id)).isEqualTo("CANCELLED");
+                assertThat(jdbc.queryForObject("select count(*) from copy where id = ?::uuid", Integer.class, b)).isZero();
+                assertThat(copyStatus(a)).isEqualTo("AVAILABLE");
+            } else {
+                assertThat(statuses.get(0)).isEqualTo(200);
+                assertThat(statuses.get(1)).isEqualTo(409);
+                assertThat(proposalStatus(id)).isEqualTo("ACCEPTED");
+                assertThat(List.of(copyStatus(a), copyStatus(b))).containsOnly("RESERVED");
+            }
+            assertConsistent();
+        }
+        assertThat(deadlocks()).as("deletion locks copies in id order like accept").isEqualTo(deadlocksBefore);
     }
 
     @Test
