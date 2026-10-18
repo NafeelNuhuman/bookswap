@@ -76,6 +76,7 @@ New feature package `discovery` with `web` / `service` / `repository` layers, li
 - ISBN detection: if `q` parses as an ISBN it is treated only as an ISBN, never also as text.
 - No owner id in the card, since there is no shelf yet. Step 4 will add what proposals need.
 - Search text matches the displayed title/author, so typed titles on manual copies are searchable.
+- A `city` parameter that contains a NUL character or is longer than 100 characters is 400 `INVALID_LOCATION` (added in the plan; PostgreSQL cannot take NUL in a text parameter, and the anti-goals forbid a 500).
 - A small, deliberate edge: a title that happens to be a valid ISBN number would be searched as an ISBN.
 
 ## Open and deferred

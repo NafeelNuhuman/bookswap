@@ -27,4 +27,14 @@ public class DiscoveryController {
                                        @RequestParam(defaultValue = "20") int size) {
         return discoveryService.feed(UUID.fromString(principal.getName()), city, page, size);
     }
+
+    /** The same cards, narrowed by title/author text or an exact ISBN. */
+    @GetMapping("/api/search")
+    public PageResponse<CopyCard> search(Principal principal,
+                                         @RequestParam String q,
+                                         @RequestParam(required = false) String city,
+                                         @RequestParam(defaultValue = "0") int page,
+                                         @RequestParam(defaultValue = "20") int size) {
+        return discoveryService.search(UUID.fromString(principal.getName()), q, city, page, size);
+    }
 }

@@ -107,4 +107,51 @@ class DiscoveryServiceTest {
         assertThatThrownBy(() -> service.feed(me, "a\u0000b", 0, 20)).isInstanceOf(InvalidLocationException.class);
         verify(repository, never()).feed(any(), any(), any());
     }
+
+    // --- search ---
+
+    private String capturedPattern() {
+        ArgumentCaptor<String> pattern = ArgumentCaptor.forClass(String.class);
+        verify(repository).searchByText(eq(me), eq("berlin"), pattern.capture(), any(Pageable.class));
+        return pattern.getValue();
+    }
+
+    @Test
+    void isbnLookingQueryUsesTheExactIsbnSearchWithTheNormalizedIsbn13() {
+        when(repository.searchByIsbn(eq(me), eq("berlin"), eq("9780306406157"), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+        service.search(me, "0-306-40615-2", "Berlin", 0, 20);
+        verify(repository).searchByIsbn(eq(me), eq("berlin"), eq("9780306406157"), any(Pageable.class));
+        verify(repository, never()).searchByText(any(), any(), any(), any());
+    }
+
+    @Test
+    void otherQueriesUseACaseInsensitiveContainsPattern() {
+        when(repository.searchByText(eq(me), eq("berlin"), any(), any(Pageable.class))).thenReturn(new PageImpl<>(List.of()));
+        service.search(me, "  Fox ", "Berlin", 0, 20);
+        assertThat(capturedPattern()).isEqualTo("%fox%");
+    }
+
+    @Test
+    void likeWildcardsAndBackslashAreEscaped() {
+        when(repository.searchByText(eq(me), eq("berlin"), any(), any(Pageable.class))).thenReturn(new PageImpl<>(List.of()));
+        service.search(me, "100%_\\", "Berlin", 0, 20);
+        assertThat(capturedPattern()).isEqualTo("%100\\%\\_\\\\%");
+    }
+
+    @Test
+    void blankOverLongOrNulQueryIsInvalidQuery() {
+        for (String bad : new String[]{null, "   ", "x".repeat(101), "a\u0000b"}) {
+            assertThatThrownBy(() -> service.search(me, bad, "Berlin", 0, 20))
+                    .as("query %s", bad == null ? "null" : bad.length() + " chars").isInstanceOf(InvalidQueryException.class);
+        }
+        verify(repository, never()).searchByText(any(), any(), any(), any());
+        verify(repository, never()).searchByIsbn(any(), any(), any(), any());
+    }
+
+    @Test
+    void aQueryOfExactlyOneHundredCharactersIsAccepted() {
+        when(repository.searchByText(eq(me), eq("berlin"), any(), any(Pageable.class))).thenReturn(new PageImpl<>(List.of()));
+        service.search(me, "x".repeat(100), "Berlin", 0, 20);
+    }
 }

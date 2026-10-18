@@ -31,6 +31,17 @@ All endpoints need a bearer token. New copies start `UNLISTED`; listing one need
 
 Someone else's copy is a 404. A reserved copy cannot be edited, unlisted or removed (409 `COPY_RESERVED`).
 
+## Discovery API
+
+Read-only, bearer token required. Both return other people's *available* copies (never your own) in one city, newest first, in the same paginated `PageResponse`.
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /api/feed?city=&page=&size=` | What is available near you |
+| `GET /api/search?q=&city=&page=&size=` | The same, narrowed by `q`: a valid ISBN (10 or 13, hyphens ok) is an exact match, anything else is a partial, case-insensitive match on title or author (`%` and `_` are literal; 1-100 characters) |
+
+`city` defaults to your profile city, is matched case-insensitively, and is required if your profile has none (400 `LOCATION_REQUIRED`; a NUL or over-100-character city is 400 `INVALID_LOCATION`). A card is `{copyId, isbn, title, author, coverUrl, grade, detailsSource, owner: {displayName, city}}`; the owner's email and postal code are never exposed.
+
 ## Test
 
 ```bash

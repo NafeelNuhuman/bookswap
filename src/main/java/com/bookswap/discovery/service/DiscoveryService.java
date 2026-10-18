@@ -1,11 +1,13 @@
 package com.bookswap.discovery.service;
 
+import com.bookswap.book.domain.InvalidIsbnException;
+import com.bookswap.book.domain.Isbn;
 import com.bookswap.common.web.PageResponse;
 import com.bookswap.common.web.Paging;
+import com.bookswap.copy.domain.Copy;
 import com.bookswap.discovery.repository.DiscoveryRepository;
 import com.bookswap.discovery.repository.DiscoveryRow;
 import com.bookswap.discovery.web.CopyCard;
-import com.bookswap.copy.domain.Copy;
 import com.bookswap.user.service.UserService;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -19,6 +21,7 @@ import java.util.UUID;
 @Service
 public class DiscoveryService {
     static final int MAX_CITY_LENGTH = 100;
+    static final int MAX_QUERY_LENGTH = 100;
 
     private final DiscoveryRepository repository;
     private final UserService userService;
@@ -32,6 +35,30 @@ public class DiscoveryService {
     public PageResponse<CopyCard> feed(UUID me, String city, int page, int size) {
         String cityLower = resolveCity(me, city);
         return PageResponse.from(repository.feed(me, cityLower, pageable(page, size)).map(DiscoveryService::toCard));
+    }
+
+    /** An ISBN-looking query is an exact ISBN match; anything else is a case-insensitive "contains" on title or author. */
+    @Transactional(readOnly = true)
+    public PageResponse<CopyCard> search(UUID me, String q, String city, int page, int size) {
+        String text = q == null ? "" : q.strip();
+        if (text.isEmpty() || text.length() > MAX_QUERY_LENGTH || text.indexOf('\u0000') >= 0) {
+            throw new InvalidQueryException();
+        }
+        String cityLower = resolveCity(me, city);
+        Pageable pageable = pageable(page, size);
+        String isbn13;
+        try {
+            isbn13 = Isbn.parse(text).value();
+        } catch (InvalidIsbnException notAnIsbn) {
+            String pattern = "%" + escapeLike(text.toLowerCase(Locale.ROOT)) + "%";
+            return PageResponse.from(repository.searchByText(me, cityLower, pattern, pageable).map(DiscoveryService::toCard));
+        }
+        return PageResponse.from(repository.searchByIsbn(me, cityLower, isbn13, pageable).map(DiscoveryService::toCard));
+    }
+
+    /** Makes %, _ and the escape character itself literal in a LIKE pattern (the backslash must be doubled first). */
+    static String escapeLike(String s) {
+        return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
     }
 
     /** The city to search in, trimmed and lower-cased: the explicit one, else the caller's profile city. */
