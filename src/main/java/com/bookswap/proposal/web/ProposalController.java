@@ -47,6 +47,14 @@ public class ProposalController {
                 request == null ? null : request.reason());
     }
 
+    /** Either party, while the exchange is accepted: where and when to meet. Visible to the two parties only. */
+    @PutMapping("/{id}/pickup-note")
+    public ProposalView pickupNote(Principal principal, @PathVariable UUID id,
+                                   @RequestBody(required = false) PickupNoteRequest request) {
+        return proposalService.setPickupNote(UUID.fromString(principal.getName()), id,
+                request == null ? null : request.note());
+    }
+
     /** Either party: "the swap happened". The second confirmation completes the exchange and moves the books. */
     @PostMapping("/{id}/confirm")
     public ProposalView confirm(Principal principal, @PathVariable UUID id) {

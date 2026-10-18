@@ -97,6 +97,66 @@ class RejectCancelIT extends ProposalTestBase {
     }
 
     @Test
+    void eitherPartyCanCallOffAnAcceptedExchangeNobodyConfirmed() throws Exception {
+        for (var caller : List.of("alice", "bob")) {
+            jdbc.execute("TRUNCATE copy, book CASCADE");
+            String id = propose();
+            action(bob, id, "accept").andExpect(status().isOk());
+            action(caller.equals("alice") ? alice : bob, id, "cancel").andExpect(status().isOk())
+                    .andExpect(jsonPath("$.status").value("CANCELLED"))
+                    .andExpect(jsonPath("$.cancelCause").value("WITHDRAWN"));
+            assertThat(copyStatus(b1)).as(caller).isEqualTo("AVAILABLE");
+            assertThat(copyStatus(a1)).as(caller).isEqualTo("AVAILABLE");
+            feed(alice).andExpect(jsonPath("$.totalElements").value(1));
+        }
+    }
+
+    @Test
+    void afterOneConfirmationTheConfirmerCannotCancelButTheOtherPartyCan() throws Exception {
+        String id = propose();
+        action(bob, id, "accept").andExpect(status().isOk());
+        action(alice, id, "confirm").andExpect(status().isOk());
+
+        action(alice, id, "cancel").andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("PROPOSAL_ACTION_NOT_ALLOWED"));
+        assertThat(copyStatus(b1)).isEqualTo("RESERVED");
+        detail(alice, id).andExpect(jsonPath("$.status").value("ACCEPTED")).andExpect(jsonPath("$.confirmedByMe").value(true));
+
+        action(bob, id, "cancel").andExpect(status().isOk()).andExpect(jsonPath("$.status").value("CANCELLED"));
+        assertThat(copyStatus(b1)).isEqualTo("AVAILABLE");
+        assertThat(copyStatus(a1)).isEqualTo("AVAILABLE");
+    }
+
+    @Test
+    void cancellingAnAcceptedExchangeDoesNotReviveProposalsItCancelled() throws Exception {
+        String id = propose();
+        String c1 = addListed(carol, 5, "Book 5");
+        String competing = proposeOk(carol, List.of(b1), List.of(c1));
+        action(bob, id, "accept").andExpect(status().isOk());
+        action(alice, id, "cancel").andExpect(status().isOk());
+        detail(carol, competing).andExpect(jsonPath("$.status").value("CANCELLED"))
+                .andExpect(jsonPath("$.cancelCause").value("COPY_UNAVAILABLE"));
+    }
+
+    @Test
+    void anAcceptedExchangePastItsDeadlineCannotBeCancelled() throws Exception {
+        String id = propose();
+        action(bob, id, "accept").andExpect(status().isOk());
+        jdbc.update("update proposal set confirm_by = now() - interval '1 minute' where id = ?::uuid", id);
+        action(alice, id, "cancel").andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("PROPOSAL_NOT_OPEN"));
+        assertThat(copyStatus(b1)).isEqualTo("RESERVED");
+    }
+
+    @Test
+    void aStrangerCannotCancelAnAcceptedExchange() throws Exception {
+        String id = propose();
+        action(bob, id, "accept").andExpect(status().isOk());
+        action(carol, id, "cancel").andExpect(status().isNotFound());
+        assertThat(copyStatus(b1)).isEqualTo("RESERVED");
+    }
+
+    @Test
     void actionsOnClosedProposalsAreNotOpen() throws Exception {
         String id = propose();
         action(alice, id, "cancel").andExpect(status().isOk());

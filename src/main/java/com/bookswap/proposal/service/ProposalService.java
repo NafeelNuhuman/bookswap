@@ -146,6 +146,15 @@ public class ProposalService {
         return assembler.toView(locked.proposal(), me, now);
     }
 
+    /** Either party sets (or, with blank text, clears) the shared note about where and when to meet. */
+    @Transactional
+    public ProposalView setPickupNote(UUID me, UUID id, String note) {
+        Instant now = clock.instant();
+        Proposal proposal = load(me, id);
+        proposal.setPickupNote(me, checkedText(note, "pickup note"), now);
+        return assembler.toView(proposal, me, now);
+    }
+
     /**
      * Records the caller's confirmation of the swap. The second party's confirmation completes the exchange: in the
      * same transaction every copy changes owner (and becomes unlisted), or nothing changes at all.
