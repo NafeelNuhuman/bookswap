@@ -60,8 +60,14 @@ class ProposalViewAssembler {
         for (Proposal p : proposals) {
             boolean reveal = viewer != null && p.getStatus() == ProposalStatus.ACCEPTED;
             List<ProposalItemRow> rows = rowsByProposal.getOrDefault(p.getId(), List.of());
+            boolean showNote = viewer != null
+                    && (p.getStatus() == ProposalStatus.ACCEPTED || p.getStatus() == ProposalStatus.COMPLETED);
+            UUID other = viewer == null ? null : viewer.equals(p.getProposerId()) ? p.getRecipientId() : p.getProposerId();
             views.add(new ProposalView(p.getId(), p.effectiveStatus(now), p.getCancelCause(), p.getParentId(),
-                    p.getMessage(), p.getRejectReason(), p.getCreatedAt(), p.getExpiresAt(),
+                    p.getMessage(), p.getRejectReason(), p.getCreatedAt(), p.getExpiresAt(), p.getAcceptedAt(),
+                    p.getConfirmBy(), p.getCompletedAt(),
+                    viewer == null ? null : p.hasConfirmed(viewer), viewer == null ? null : p.hasConfirmed(other),
+                    showNote ? p.getPickupNote() : null,
                     party(usersById.get(p.getProposerId()), reveal && !p.getProposerId().equals(viewer)),
                     party(usersById.get(p.getRecipientId()), reveal && !p.getRecipientId().equals(viewer)),
                     itemViews(rows, Side.OFFERED), itemViews(rows, Side.REQUESTED)));

@@ -146,6 +146,47 @@ public class ProposalService {
         return assembler.toView(locked.proposal(), me, now);
     }
 
+    /**
+     * Records the caller's confirmation of the swap. The second party's confirmation completes the exchange: in the
+     * same transaction every copy changes owner (and becomes unlisted), or nothing changes at all.
+     */
+    @Transactional
+    public ProposalView confirm(UUID me, UUID id) {
+        Instant now = clock.instant();
+        LockedProposal locked = lockCopiesThenLoad(me, id);
+        Proposal proposal = locked.proposal();
+        if (proposal.confirm(me, now) == Proposal.ConfirmOutcome.COMPLETED) {
+            transferCopies(proposal, locked.copies(), now);
+        }
+        return assembler.toView(proposal, me, now);
+    }
+
+    /**
+     * Gives every copy to the other party. Offered copies must still be reserved and the proposer's, requested ones
+     * the recipient's; anything else means the exchange can no longer be honoured, so nothing moves.
+     */
+    private void transferCopies(Proposal proposal, List<Copy> locked, Instant now) {
+        Map<UUID, Side> sideByCopy = new HashMap<>();
+        for (ProposalItem item : items.findByProposalId(proposal.getId())) {
+            sideByCopy.put(item.getCopyId(), item.getSide());
+        }
+        if (locked.size() != sideByCopy.size() || sideByCopy.containsKey(null)) {
+            throw new CopyNotAvailableException();
+        }
+        for (Copy copy : locked) {
+            Side side = sideByCopy.get(copy.getId());
+            UUID expectedOwner = side == Side.OFFERED ? proposal.getProposerId() : proposal.getRecipientId();
+            if (!copy.getOwnerId().equals(expectedOwner) || copy.getStatus() != CopyStatus.RESERVED) {
+                throw new CopyNotAvailableException();
+            }
+        }
+        for (Copy copy : locked) {
+            UUID newOwner = sideByCopy.get(copy.getId()) == Side.OFFERED ? proposal.getRecipientId() : proposal.getProposerId();
+            copy.transferTo(newOwner, now);
+        }
+        copies.saveAllAndFlush(locked);
+    }
+
     /** A proposal together with the copies it holds, locked. */
     record LockedProposal(Proposal proposal, List<Copy> copies) {}
 

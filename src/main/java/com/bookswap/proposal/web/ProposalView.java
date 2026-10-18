@@ -12,10 +12,13 @@ import java.util.UUID;
 
 /**
  * A proposal as one of its two parties sees it. {@code email} and {@code contactNote} are only ever present on the
- * other party of an accepted proposal, in the detail view.
+ * other party of an accepted proposal, in the detail view. {@code confirmedByMe}, {@code confirmedByOther} and
+ * {@code pickupNote} are null in list cards (no viewer), and the note is null unless the exchange is accepted or completed.
  */
 public record ProposalView(UUID id, ProposalStatus status, CancelCause cancelCause, UUID parentId, String message,
-                           String rejectReason, Instant createdAt, Instant expiresAt, Party proposer, Party recipient,
+                           String rejectReason, Instant createdAt, Instant expiresAt, Instant acceptedAt,
+                           Instant confirmBy, Instant completedAt, Boolean confirmedByMe, Boolean confirmedByOther,
+                           String pickupNote, Party proposer, Party recipient,
                            List<Item> offered, List<Item> requested) {
 
     @JsonInclude(JsonInclude.Include.NON_NULL)

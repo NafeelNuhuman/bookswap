@@ -357,6 +357,31 @@ class ProposalServiceTest {
     }
 
     @Test
+    void confirmLocksTheCopiesBeforeItReadsTheProposalAndTransfersOnTheSecondConfirmation() {
+        Copy requested = available(other, ConditionGrade.GOOD);
+        Copy mine = available(me, ConditionGrade.GOOD);
+        requested.reserve(NOW);
+        mine.reserve(NOW);
+        Proposal p = proposalFromMeTo(other);
+        p.accept(other, NOW, Duration.ofDays(14));
+        p.confirm(me, NOW);
+        when(proposals.findById(p.getId())).thenReturn(java.util.Optional.of(p));
+        when(items.findByProposalId(p.getId())).thenReturn(List.of(
+                item(p, requested, Side.REQUESTED, ConditionGrade.GOOD), item(p, mine, Side.OFFERED, ConditionGrade.GOOD)));
+        when(copies.lockForUpdate(anyCollection())).thenReturn(List.of(requested, mine));
+
+        service.confirm(other, p.getId());
+
+        org.mockito.InOrder order = org.mockito.Mockito.inOrder(copies, proposals);
+        order.verify(copies).lockForUpdate(anyCollection());
+        order.verify(proposals).findById(p.getId());
+        assertThat(p.getStatus()).isEqualTo(ProposalStatus.COMPLETED);
+        assertThat(requested.getOwnerId()).isEqualTo(me);
+        assertThat(mine.getOwnerId()).isEqualTo(other);
+        assertThat(List.of(requested, mine)).allSatisfy(c -> assertThat(c.getStatus()).isEqualTo(CopyStatus.UNLISTED));
+    }
+
+    @Test
     void strangerCannotActOnAProposal() {
         Proposal p = proposalFromMeTo(other);
         when(proposals.findById(p.getId())).thenReturn(java.util.Optional.of(p));

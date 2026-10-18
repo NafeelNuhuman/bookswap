@@ -47,7 +47,13 @@ public class ProposalController {
                 request == null ? null : request.reason());
     }
 
-    /** Proposer only, while the proposal is still open. */
+    /** Either party: "the swap happened". The second confirmation completes the exchange and moves the books. */
+    @PostMapping("/{id}/confirm")
+    public ProposalView confirm(Principal principal, @PathVariable UUID id) {
+        return proposalService.confirm(UUID.fromString(principal.getName()), id);
+    }
+
+    /** The proposer while the proposal is open; either party after acceptance (see the exchange rules). */
     @PostMapping("/{id}/cancel")
     public ProposalView cancel(Principal principal, @PathVariable UUID id) {
         return proposalService.cancel(UUID.fromString(principal.getName()), id);
