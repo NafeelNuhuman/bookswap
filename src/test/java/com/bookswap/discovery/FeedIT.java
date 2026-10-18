@@ -49,12 +49,17 @@ class FeedIT extends MarketplaceTestBase {
                 .andExpect(jsonPath("$.content[0].coverUrl").value("https://covers.example/1.jpg"))
                 .andExpect(jsonPath("$.content[0].grade").value("GOOD"))
                 .andExpect(jsonPath("$.content[0].detailsSource").value("CATALOG"))
+                .andExpect(jsonPath("$.content[0].owner.id").value(ownerId(bob)))
                 .andExpect(jsonPath("$.content[0].owner.displayName").value("Bob"))
                 .andExpect(jsonPath("$.content[0].owner.city").value("Berlin"))
                 .andReturn().getResponse().getContentAsString();
 
         assertThat(body).doesNotContain("@example.com", "postalCode", "email", "10115");
-        assertThat(read(feed(alice)).get("content").get(0).get("owner").size()).as("owner has exactly two fields").isEqualTo(2);
+        assertThat(read(feed(alice)).get("content").get(0).get("owner").size()).as("owner has exactly id, name and city").isEqualTo(3);
+    }
+
+    private String ownerId(JsonNode tokens) throws Exception {
+        return read(mvc.perform(get("/api/users/me").header("Authorization", bearer(tokens)))).get("id").asText();
     }
 
     @Test

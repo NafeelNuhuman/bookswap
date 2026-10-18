@@ -36,6 +36,13 @@ public class DiscoveryService {
         return PageResponse.from(repository.feed(me, resolved, pageable(page, size)).map(DiscoveryService::toCard));
     }
 
+    /** One user's available copies. 404 if there is no such user. */
+    @Transactional(readOnly = true)
+    public PageResponse<CopyCard> shelf(UUID userId, int page, int size) {
+        userService.requireExists(userId);
+        return PageResponse.from(repository.shelf(userId, pageable(page, size)).map(DiscoveryService::toCard));
+    }
+
     /** An ISBN-looking query is an exact ISBN match; anything else is a case-insensitive "contains" on title or author. */
     @Transactional(readOnly = true)
     public PageResponse<CopyCard> search(UUID me, String q, String city, int page, int size) {
@@ -86,6 +93,6 @@ public class DiscoveryService {
     static CopyCard toCard(DiscoveryRow row) {
         return new CopyCard(row.copyId(), row.isbn13(), row.title(), row.author(), row.coverUrl(), row.grade(),
                 row.fromCatalog() ? Copy.DetailsSource.CATALOG : Copy.DetailsSource.MANUAL,
-                new CopyCard.Owner(row.ownerName(), row.ownerCity()));
+                new CopyCard.Owner(row.ownerId(), row.ownerName(), row.ownerCity()));
     }
 }

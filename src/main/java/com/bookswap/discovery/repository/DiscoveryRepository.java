@@ -18,7 +18,7 @@ public interface DiscoveryRepository extends Repository<Copy, UUID> {
     @Query(value = """
             select new com.bookswap.discovery.repository.DiscoveryRow(
                 c.id, c.isbn13, coalesce(b.title, c.manualTitle), coalesce(b.author, c.manualAuthor), b.coverUrl,
-                c.grade, case when b.isbn13 is null then false else true end, u.displayName, u.city)
+                c.grade, case when b.isbn13 is null then false else true end, u.id, u.displayName, u.city)
             from Copy c left join c.book b join User u on u.id = c.ownerId
             where c.status = com.bookswap.copy.domain.CopyStatus.AVAILABLE
               and c.ownerId <> :me and lower(u.city) = lower(:city)
@@ -33,7 +33,7 @@ public interface DiscoveryRepository extends Repository<Copy, UUID> {
     @Query(value = """
             select new com.bookswap.discovery.repository.DiscoveryRow(
                 c.id, c.isbn13, coalesce(b.title, c.manualTitle), coalesce(b.author, c.manualAuthor), b.coverUrl,
-                c.grade, case when b.isbn13 is null then false else true end, u.displayName, u.city)
+                c.grade, case when b.isbn13 is null then false else true end, u.id, u.displayName, u.city)
             from Copy c left join c.book b join User u on u.id = c.ownerId
             where c.status = com.bookswap.copy.domain.CopyStatus.AVAILABLE
               and c.ownerId <> :me and lower(u.city) = lower(:city) and c.isbn13 = :isbn13
@@ -50,7 +50,7 @@ public interface DiscoveryRepository extends Repository<Copy, UUID> {
     @Query(value = """
             select new com.bookswap.discovery.repository.DiscoveryRow(
                 c.id, c.isbn13, coalesce(b.title, c.manualTitle), coalesce(b.author, c.manualAuthor), b.coverUrl,
-                c.grade, case when b.isbn13 is null then false else true end, u.displayName, u.city)
+                c.grade, case when b.isbn13 is null then false else true end, u.id, u.displayName, u.city)
             from Copy c left join c.book b join User u on u.id = c.ownerId
             where c.status = com.bookswap.copy.domain.CopyStatus.AVAILABLE
               and c.ownerId <> :me and lower(u.city) = lower(:city)
@@ -66,4 +66,18 @@ public interface DiscoveryRepository extends Repository<Copy, UUID> {
             """)
     Page<DiscoveryRow> searchByText(@Param("me") UUID me, @Param("city") String city,
                                     @Param("pattern") String pattern, Pageable pageable);
+
+    /** Everything one user currently has available, newest first, whatever city they are in. */
+    @Query(value = """
+            select new com.bookswap.discovery.repository.DiscoveryRow(
+                c.id, c.isbn13, coalesce(b.title, c.manualTitle), coalesce(b.author, c.manualAuthor), b.coverUrl,
+                c.grade, case when b.isbn13 is null then false else true end, u.id, u.displayName, u.city)
+            from Copy c left join c.book b join User u on u.id = c.ownerId
+            where c.status = com.bookswap.copy.domain.CopyStatus.AVAILABLE and c.ownerId = :ownerId
+            """,
+            countQuery = """
+            select count(c) from Copy c
+            where c.status = com.bookswap.copy.domain.CopyStatus.AVAILABLE and c.ownerId = :ownerId
+            """)
+    Page<DiscoveryRow> shelf(@Param("ownerId") UUID ownerId, Pageable pageable);
 }

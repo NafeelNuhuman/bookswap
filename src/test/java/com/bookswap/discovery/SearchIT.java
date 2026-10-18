@@ -129,7 +129,8 @@ class SearchIT extends MarketplaceTestBase {
     @Test
     void searchCardsNeverContainPrivateFields() throws Exception {
         listedWith(bob, FOX, "Fantastic Mr Fox", "Roald Dahl");
-        String body = search(alice, "q", "fox").andExpect(jsonPath("$.content[0].owner.displayName").value("Bob"))
+        String body = search(alice, "q", "fox").andExpect(jsonPath("$.content[0].owner.id").isNotEmpty())
+                .andExpect(jsonPath("$.content[0].owner.displayName").value("Bob"))
                 .andExpect(jsonPath("$.content[0].owner.city").value("Berlin"))
                 .andReturn().getResponse().getContentAsString();
         assertThat(body).doesNotContain("@example.com", "postalCode", "email", "10115");

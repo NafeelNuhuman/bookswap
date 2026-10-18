@@ -6,6 +6,7 @@ import com.bookswap.discovery.repository.DiscoveryRepository;
 import com.bookswap.discovery.repository.DiscoveryRow;
 import com.bookswap.discovery.web.CopyCard;
 import com.bookswap.common.web.PageResponse;
+import com.bookswap.user.service.UserNotFoundException;
 import com.bookswap.user.service.UserService;
 import com.bookswap.user.web.ProfileResponse;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,6 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -74,12 +76,13 @@ class DiscoveryServiceTest {
     }
 
     @Test
-    void feedMapsRowsToCardsWithDetailsSourceAndNoOwnerId() {
+    void feedMapsRowsToCardsWithDetailsSourceAndOwnerId() {
         UUID copyId = UUID.randomUUID();
+        UUID bobId = UUID.randomUUID();
         DiscoveryRow typed = new DiscoveryRow(copyId, "9780140328721", "Typed", "Me", null,
-                ConditionGrade.GOOD, false, "Bob", "Berlin");
+                ConditionGrade.GOOD, false, bobId, "Bob", "Berlin");
         DiscoveryRow shared = new DiscoveryRow(UUID.randomUUID(), "9780306406157", "Shared", "Them", "https://c/m.jpg",
-                ConditionGrade.NEW, true, "Carol", "Berlin");
+                ConditionGrade.NEW, true, UUID.randomUUID(), "Carol", "Berlin");
         when(repository.feed(eq(me), eq("Berlin"), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(typed, shared)));
 
         PageResponse<CopyCard> page = service.feed(me, "Berlin", 0, 20);
@@ -88,8 +91,33 @@ class DiscoveryServiceTest {
         CopyCard first = page.content().get(0);
         assertThat(first.copyId()).isEqualTo(copyId);
         assertThat(first.detailsSource()).isEqualTo(Copy.DetailsSource.MANUAL);
-        assertThat(first.owner()).isEqualTo(new CopyCard.Owner("Bob", "Berlin"));
+        assertThat(first.owner()).isEqualTo(new CopyCard.Owner(bobId, "Bob", "Berlin"));
         assertThat(page.content().get(1).detailsSource()).isEqualTo(Copy.DetailsSource.CATALOG);
+    }
+
+    @Test
+    void shelfOfAnUnknownUserIsNotFoundAndNeverQueries() {
+        UUID unknown = UUID.randomUUID();
+        doThrow(new UserNotFoundException()).when(userService).requireExists(unknown);
+        assertThatThrownBy(() -> service.shelf(unknown, 0, 20)).isInstanceOf(UserNotFoundException.class);
+        verifyNoInteractions(repository);
+    }
+
+    @Test
+    void shelfClampsPagingAndMapsRowsToCards() {
+        UUID owner = UUID.randomUUID();
+        DiscoveryRow row = new DiscoveryRow(UUID.randomUUID(), "9780140328721", "T", "A", null,
+                ConditionGrade.GOOD, true, owner, "Bob", "Munich");
+        when(repository.shelf(eq(owner), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(row)));
+        ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
+
+        PageResponse<CopyCard> page = service.shelf(owner, -3, 100_000);
+
+        verify(userService).requireExists(owner);
+        verify(repository).shelf(eq(owner), captor.capture());
+        assertThat(captor.getValue().getPageNumber()).isZero();
+        assertThat(captor.getValue().getPageSize()).isEqualTo(100);
+        assertThat(page.content().get(0).owner()).isEqualTo(new CopyCard.Owner(owner, "Bob", "Munich"));
     }
 
     @Test
