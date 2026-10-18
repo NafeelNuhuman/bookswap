@@ -22,7 +22,7 @@ All endpoints need a bearer token. New copies start `UNLISTED`; listing one need
 | Endpoint | Purpose |
 | --- | --- |
 | `GET /api/books/lookup?isbn=` | Look a book up (local first, then Open Library); saves nothing. 404 `BOOK_NOT_FOUND` / 503 `CATALOG_UNAVAILABLE` mean "enter title and author manually" |
-| `POST /api/copies` | Add a copy: `{isbn, grade, title?, author?}`. ISBN-10/13 accepted, stored as ISBN-13 |
+| `POST /api/copies` | Add a copy: `{isbn, grade, title?, author?}`. ISBN-10/13 accepted, stored as ISBN-13. `title`/`author` are used only if neither we nor the catalog know the book; they are stored on your copy, never in the shared book record, and the catalog's details replace them automatically once the catalog knows the book (`detailsSource`: `CATALOG` / `MANUAL`) |
 | `GET /api/copies?status=&page=&size=` | My library, paginated (size 1-100, default 20) |
 | `GET /api/copies/{id}`, `PUT /api/copies/{id}` | View a copy / change its grade |
 | `POST /api/copies/{id}/list`, `/unlist` | Make a copy available / unlisted |

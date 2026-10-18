@@ -28,9 +28,14 @@ Concurrent legitimate refreshes log the user out everywhere; access tokens stay 
 
 Whole-branch review of `f784054..62902b6`. The one Important finding that was a plain bug (a huge `page` value gave a 500) was fixed with a test. Open items:
 
-## Needs a decision before step 3
+## Resolved after the review
 
-- **I-2. Any user can permanently set the shared `book` row.** When the catalog is down (or has no entry), the first user's manual title/author becomes the record every user sees and every later add reuses; no code path repairs it (books are never updated). Also stores the placeholder author "Unknown author" permanently. Options: (a) add a `source` column (`CATALOG`/`MANUAL`) and retry the catalog on later lookups/adds for `MANUAL` books, upgrading the row if it answers; (b) return 503 when the catalog is unavailable and manual details were sent, so manual data is only accepted after a definite "not found". (b) conflicts with US-05's "if the lookup fails ... I can enter title and author manually".
+- **I-2. Any user could permanently set the shared `book` row.** Fixed by making manual title/author per-copy: migration `V3__copy_manual_details.sql` drops the `copy -> book` foreign key and adds optional `title`/`author` to `copy`; manual details never enter the shared `book` table; a catalog-backed book row wins over typed details at display time (`Copy.getTitle()`), so the catalog takes over automatically. Tests: `CopyLibraryIT.manualDetailsStayOnTheCopyAndNeverEnterTheSharedBook`, `CopyHardeningIT` (mixed N+1, constraints).
+- Known limitation that remains: a user can still type nonsense or offensive text for an ISBN the catalog never knows, visible on their own copies (with their display name once step 3 shows owners). The spec has no moderation role in v1.
+
+## Future feature: manual book entry polish
+
+Ideas discussed and parked: a small-model check of manually entered text before saving (behind an interface like `BookCatalog`; decide fail-open vs fail-closed; prompt-injection hardening; it catches inappropriate text, not wrong text), a report/hide mechanism, or hiding manual-details copies from browse until the catalog confirms.
 
 ## Minors
 
