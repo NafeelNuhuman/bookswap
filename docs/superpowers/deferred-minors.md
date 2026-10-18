@@ -116,3 +116,16 @@ Open:
    (harmless, it is idempotent and per-proposal transactional, but wasteful); add a lock if the app is ever scaled out.
 6. Releasing or transferring a copy that is not reserved throws `IllegalStateException` (an invariant violation, not
    user input); the job logs and skips such an exchange, an interactive call would answer 500.
+
+## Step 5 whole-branch review (fresh fable reviewer): one Important fixed, minors deferred
+
+Fixed: `AuthService.refresh` now refuses (and clears the tokens of) a deleted user, so a refresh racing the account deletion cannot leave a usable token behind (`AccountDeletionIT.aRefreshTokenThatOutlivedTheDeletionIsStillRefused`, RED then GREEN).
+
+Minors:
+
+7. The recipient cancelling a closed (completed, cancelled, rejected...) proposal gets 403 `PROPOSAL_ACTION_NOT_ALLOWED` while the proposer gets 409 `PROPOSAL_NOT_OPEN` (cancel on a non-accepted proposal checks the role first). Pre-existing order; untested for the recipient.
+8. A confirmer cancelling at or after `confirm_by` gets 409 instead of 403 (state is checked before the confirmer rule).
+9. A pickup-note edit racing a confirm can make the confirm fail its version check with 409 `CONCURRENT_UPDATE`; the end state is consistent and a retry works.
+10. `ConcurrencyIT.housekeepingRacingALateConfirmSettlesOnce` sets the deadline in the past first, so the confirm is always 409; it checks no 500, no deadlock and a single settlement, not interleavings.
+11. `HousekeepingIT.theJobIsScheduled` only proves some scheduled task exists.
+12. The spec names the detail field `confirmDeadline`; the API calls it `confirmBy`.

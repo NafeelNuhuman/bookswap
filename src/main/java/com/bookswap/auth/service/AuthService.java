@@ -64,6 +64,11 @@ public class AuthService {
     @Transactional(noRollbackFor = InvalidRefreshTokenException.class)
     public TokenResponse refresh(String rawRefreshToken) {
         UUID userId = refreshTokens.consume(rawRefreshToken);
+        if (users.findById(userId).filter(u -> !u.isDeleted()).isEmpty()) {
+            // e.g. a refresh that raced the account deletion left a live token behind
+            refreshTokens.deleteAll(userId);
+            throw new InvalidRefreshTokenException();
+        }
         return issueTokens(userId);
     }
 

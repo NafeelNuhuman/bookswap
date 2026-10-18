@@ -156,6 +156,15 @@ class AccountDeletionIT extends ProposalTestBase {
     }
 
     @Test
+    void aRefreshTokenThatOutlivedTheDeletionIsStillRefused() throws Exception {
+        // a refresh racing the deletion can leave a live token behind; simulate it by deleting the user underneath it
+        String refresh = bob.get("refreshToken").asText();
+        jdbc.update("update users set deleted_at = now() where email = 'bob@example.com'");
+        postJson("/api/auth/refresh", Map.of("refreshToken", refresh)).andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("INVALID_REFRESH_TOKEN"));
+    }
+
+    @Test
     void aStillValidAccessTokenGetsNotFoundOnTheProfile() throws Exception {
         deleteWithPassword(bob).andExpect(status().isNoContent());
         mvc.perform(get("/api/users/me").header("Authorization", bearer(bob)))
