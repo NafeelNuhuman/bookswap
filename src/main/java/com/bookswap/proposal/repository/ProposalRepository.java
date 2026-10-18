@@ -11,6 +11,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
 import java.util.Collection;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -34,6 +35,24 @@ public interface ProposalRepository extends JpaRepository<Proposal, UUID> {
             """)
     int cancelOpenContaining(@Param("copyIds") Collection<UUID> copyIds,
                              @Param("exceptProposalId") UUID exceptProposalId, @Param("now") Instant now);
+
+    /** Housekeeping: proposed proposals past their expiry become expired (bumps the version like any other writer). */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            update Proposal p set p.status = com.bookswap.proposal.domain.ProposalStatus.EXPIRED,
+                p.updatedAt = :now, p.version = p.version + 1
+            where p.status = com.bookswap.proposal.domain.ProposalStatus.PROPOSED and p.expiresAt <= :now
+            """)
+    int expireLapsed(@Param("now") Instant now);
+
+    /** Housekeeping: accepted exchanges past their confirm deadline, oldest first. */
+    @Query("""
+            select p.id from Proposal p
+            where p.status = com.bookswap.proposal.domain.ProposalStatus.ACCEPTED and p.confirmBy <= :now
+              and p.id not in :skip
+            order by p.confirmBy, p.id
+            """)
+    List<UUID> findOverdueAccepted(@Param("now") Instant now, @Param("skip") Collection<UUID> skip, Pageable limit);
 
     @Query("select p from Proposal p where p.recipientId = :me")
     Page<Proposal> findIncoming(@Param("me") UUID me, Pageable pageable);

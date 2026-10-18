@@ -27,3 +27,5 @@ bookswap:
   proposals:
     expiry: 14d
     confirm-window: 14d
+  jobs:
+    interval: PT1H

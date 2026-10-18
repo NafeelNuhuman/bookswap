@@ -140,8 +140,7 @@ public class ProposalService {
         Instant now = clock.instant();
         LockedProposal locked = lockCopiesThenLoad(me, id);
         if (locked.proposal().cancel(me, now)) {
-            locked.copies().forEach(copy -> copy.release(now));
-            copies.saveAllAndFlush(locked.copies());
+            releaseAll(locked.copies(), now);
         }
         return assembler.toView(locked.proposal(), me, now);
     }
@@ -205,10 +204,52 @@ public class ProposalService {
      * or another confirm). Used by the actions on an already accepted exchange.
      */
     LockedProposal lockCopiesThenLoad(UUID me, UUID id) {
-        List<UUID> copyIds = items.findByProposalId(id).stream().map(ProposalItem::getCopyId)
-                .filter(Objects::nonNull).toList();
-        List<Copy> locked = copyIds.isEmpty() ? List.of() : copies.lockForUpdate(copyIds);
+        List<Copy> locked = lockCopiesOf(id);
         return new LockedProposal(load(me, id), locked);
+    }
+
+    private List<Copy> lockCopiesOf(UUID proposalId) {
+        List<UUID> copyIds = items.findByProposalId(proposalId).stream().map(ProposalItem::getCopyId)
+                .filter(Objects::nonNull).toList();
+        return copyIds.isEmpty() ? List.of() : copies.lockForUpdate(copyIds);
+    }
+
+    private void releaseAll(List<Copy> locked, Instant now) {
+        locked.forEach(copy -> copy.release(now));
+        copies.saveAllAndFlush(locked);
+    }
+
+    /** Housekeeping: proposed proposals past their expiry become expired. Returns how many. */
+    @Transactional
+    public int expireLapsed() {
+        return proposals.expireLapsed(clock.instant());
+    }
+
+    /** Housekeeping: ids of accepted exchanges past their confirm deadline, oldest first, leaving out {@code skip}. */
+    @Transactional(readOnly = true)
+    public List<UUID> overdueAccepted(Set<UUID> skip, int limit) {
+        Set<UUID> excluded = new HashSet<>(skip);
+        excluded.add(NO_PROPOSAL);
+        return proposals.findOverdueAccepted(clock.instant(), excluded, Pageable.ofSize(limit));
+    }
+
+    /**
+     * Housekeeping, no actor: settles one overdue accepted exchange (see {@link Proposal#settle}). Completing moves the
+     * copies, a no-show releases them; anything that is not (or no longer) overdue is left alone.
+     */
+    @Transactional
+    public void settle(UUID id) {
+        Instant now = clock.instant();
+        List<Copy> locked = lockCopiesOf(id);
+        Proposal proposal = proposals.findById(id).orElse(null);
+        if (proposal == null) {
+            return;
+        }
+        switch (proposal.settle(now)) {
+            case COMPLETED -> transferCopies(proposal, locked, now);
+            case CANCELLED -> releaseAll(locked, now);
+            case NONE -> { }
+        }
     }
 
     /** Called by the copy service, in its transaction, when a copy is regraded, unlisted or removed. */
