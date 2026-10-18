@@ -69,6 +69,17 @@ class SearchIT extends DiscoveryTestBase {
     }
 
     @Test
+    void caseInsensitiveSearchWorksForNonAsciiLetters() throws Exception {
+        listedWith(bob, valid(1), "İstanbul Guide", "A");                  // capital dotted I
+        listedWith(bob, valid(2), "ΟΔΥΣ ΣΟΦΟΣ", "B"); // upper-case Greek, ends in capital sigma
+
+        search(alice, "q", "İSTANBUL").andExpect(jsonPath("$.totalElements").value(1));
+        search(alice, "q", "istanbul").andExpect(jsonPath("$.totalElements").value(1));
+        // the query ends in a capital sigma: Java would fold it to a final sigma, PostgreSQL to a plain one
+        search(alice, "q", "ΟΔΥΣ").andExpect(jsonPath("$.totalElements").value(1));
+    }
+
+    @Test
     void likeWildcardsAreLiteral() throws Exception {
         listedWith(bob, valid(1), "100% Sure", "A");
         listedWith(bob, valid(2), "Fooxbar", "B");

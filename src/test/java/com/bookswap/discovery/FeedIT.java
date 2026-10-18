@@ -85,6 +85,18 @@ class FeedIT extends DiscoveryTestBase {
     }
 
     @Test
+    void citiesWithNonAsciiCaseFoldingStillMatch() throws Exception {
+        // Java lower-cases U+0130 (capital dotted I) to "i" + a combining dot, PostgreSQL to a plain "i".
+        completeProfile(alice, "Alice", "İstanbul");
+        completeProfile(bob, "Bob", "İstanbul");
+        addListed(bob, 1, "Istanbul Book");
+
+        feed(alice).andExpect(jsonPath("$.totalElements").value(1));                       // her own stored city
+        feed(alice, "city", "İSTANBUL").andExpect(jsonPath("$.totalElements").value(1));
+        feed(alice, "city", "istanbul").andExpect(jsonPath("$.totalElements").value(1));
+    }
+
+    @Test
     void locationIsRequiredWhenTheCallerHasNoCityAndSendsNone() throws Exception {
         JsonNode newcomer = registerAndLogin("new@example.com", "password123");
         addListed(bob, 1, "Berlin Book");

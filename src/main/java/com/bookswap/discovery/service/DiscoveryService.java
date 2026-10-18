@@ -14,7 +14,6 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Locale;
 import java.util.UUID;
 
 /** Every method takes the authenticated caller's id; the caller's own copies are never returned. */
@@ -33,8 +32,8 @@ public class DiscoveryService {
 
     @Transactional(readOnly = true)
     public PageResponse<CopyCard> feed(UUID me, String city, int page, int size) {
-        String cityLower = resolveCity(me, city);
-        return PageResponse.from(repository.feed(me, cityLower, pageable(page, size)).map(DiscoveryService::toCard));
+        String resolved = resolveCity(me, city);
+        return PageResponse.from(repository.feed(me, resolved, pageable(page, size)).map(DiscoveryService::toCard));
     }
 
     /** An ISBN-looking query is an exact ISBN match; anything else is a case-insensitive "contains" on title or author. */
@@ -44,16 +43,16 @@ public class DiscoveryService {
         if (text.isEmpty() || text.length() > MAX_QUERY_LENGTH || text.indexOf('\u0000') >= 0) {
             throw new InvalidQueryException();
         }
-        String cityLower = resolveCity(me, city);
+        String resolved = resolveCity(me, city);
         Pageable pageable = pageable(page, size);
         String isbn13;
         try {
             isbn13 = Isbn.parse(text).value();
         } catch (InvalidIsbnException notAnIsbn) {
-            String pattern = "%" + escapeLike(text.toLowerCase(Locale.ROOT)) + "%";
-            return PageResponse.from(repository.searchByText(me, cityLower, pattern, pageable).map(DiscoveryService::toCard));
+            String pattern = "%" + escapeLike(text) + "%";
+            return PageResponse.from(repository.searchByText(me, resolved, pattern, pageable).map(DiscoveryService::toCard));
         }
-        return PageResponse.from(repository.searchByIsbn(me, cityLower, isbn13, pageable).map(DiscoveryService::toCard));
+        return PageResponse.from(repository.searchByIsbn(me, resolved, isbn13, pageable).map(DiscoveryService::toCard));
     }
 
     /** Makes %, _ and the escape character itself literal in a LIKE pattern (the backslash must be doubled first). */
@@ -61,7 +60,10 @@ public class DiscoveryService {
         return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
     }
 
-    /** The city to search in, trimmed and lower-cased: the explicit one, else the caller's profile city. */
+    /**
+     * The city to search in, trimmed: the explicit one, else the caller's profile city. Case is folded by the
+     * database (lower() on both sides), because Java and PostgreSQL fold some letters differently (e.g. U+0130).
+     */
     String resolveCity(UUID me, String cityParam) {
         String city = cityParam == null ? "" : cityParam.strip();
         if (city.isEmpty()) {
@@ -74,7 +76,7 @@ public class DiscoveryService {
         if (city.length() > MAX_CITY_LENGTH || city.indexOf('\u0000') >= 0) {
             throw new InvalidLocationException();
         }
-        return city.toLowerCase(Locale.ROOT);
+        return city;
     }
 
     static Pageable pageable(int page, int size) {

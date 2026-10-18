@@ -47,16 +47,16 @@ class DiscoveryServiceTest {
     }
 
     @Test
-    void explicitCityWinsAndIsTrimmedAndLowerCased() {
-        assertThat(service.resolveCity(me, "  BeRLin ")).isEqualTo("berlin");
+    void explicitCityWinsAndIsTrimmedButCaseIsLeftToTheDatabase() {
+        assertThat(service.resolveCity(me, "  BeRLin ")).isEqualTo("BeRLin");
         verifyNoInteractions(userService);
     }
 
     @Test
     void blankOrMissingCityFallsBackToTheProfileCity() {
         profileCity("Munich");
-        assertThat(service.resolveCity(me, null)).isEqualTo("munich");
-        assertThat(service.resolveCity(me, "   ")).isEqualTo("munich");
+        assertThat(service.resolveCity(me, null)).isEqualTo("Munich");
+        assertThat(service.resolveCity(me, "   ")).isEqualTo("Munich");
     }
 
     @Test
@@ -80,7 +80,7 @@ class DiscoveryServiceTest {
                 ConditionGrade.GOOD, false, "Bob", "Berlin");
         DiscoveryRow shared = new DiscoveryRow(UUID.randomUUID(), "9780306406157", "Shared", "Them", "https://c/m.jpg",
                 ConditionGrade.NEW, true, "Carol", "Berlin");
-        when(repository.feed(eq(me), eq("berlin"), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(typed, shared)));
+        when(repository.feed(eq(me), eq("Berlin"), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(typed, shared)));
 
         PageResponse<CopyCard> page = service.feed(me, "Berlin", 0, 20);
 
@@ -94,10 +94,10 @@ class DiscoveryServiceTest {
 
     @Test
     void feedClampsPagingBeforeQuerying() {
-        when(repository.feed(eq(me), eq("berlin"), any(Pageable.class))).thenReturn(new PageImpl<>(List.of()));
+        when(repository.feed(eq(me), eq("Berlin"), any(Pageable.class))).thenReturn(new PageImpl<>(List.of()));
         ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
-        service.feed(me, "berlin", -2, 100_000);
-        verify(repository).feed(eq(me), eq("berlin"), captor.capture());
+        service.feed(me, "Berlin", -2, 100_000);
+        verify(repository).feed(eq(me), eq("Berlin"), captor.capture());
         assertThat(captor.getValue().getPageNumber()).isZero();
         assertThat(captor.getValue().getPageSize()).isEqualTo(100);
     }
@@ -112,29 +112,29 @@ class DiscoveryServiceTest {
 
     private String capturedPattern() {
         ArgumentCaptor<String> pattern = ArgumentCaptor.forClass(String.class);
-        verify(repository).searchByText(eq(me), eq("berlin"), pattern.capture(), any(Pageable.class));
+        verify(repository).searchByText(eq(me), eq("Berlin"), pattern.capture(), any(Pageable.class));
         return pattern.getValue();
     }
 
     @Test
     void isbnLookingQueryUsesTheExactIsbnSearchWithTheNormalizedIsbn13() {
-        when(repository.searchByIsbn(eq(me), eq("berlin"), eq("9780306406157"), any(Pageable.class)))
+        when(repository.searchByIsbn(eq(me), eq("Berlin"), eq("9780306406157"), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of()));
         service.search(me, "0-306-40615-2", "Berlin", 0, 20);
-        verify(repository).searchByIsbn(eq(me), eq("berlin"), eq("9780306406157"), any(Pageable.class));
+        verify(repository).searchByIsbn(eq(me), eq("Berlin"), eq("9780306406157"), any(Pageable.class));
         verify(repository, never()).searchByText(any(), any(), any(), any());
     }
 
     @Test
-    void otherQueriesUseACaseInsensitiveContainsPattern() {
-        when(repository.searchByText(eq(me), eq("berlin"), any(), any(Pageable.class))).thenReturn(new PageImpl<>(List.of()));
+    void otherQueriesUseAContainsPatternAndLeaveCaseFoldingToTheDatabase() {
+        when(repository.searchByText(eq(me), eq("Berlin"), any(), any(Pageable.class))).thenReturn(new PageImpl<>(List.of()));
         service.search(me, "  Fox ", "Berlin", 0, 20);
-        assertThat(capturedPattern()).isEqualTo("%fox%");
+        assertThat(capturedPattern()).isEqualTo("%Fox%");
     }
 
     @Test
     void likeWildcardsAndBackslashAreEscaped() {
-        when(repository.searchByText(eq(me), eq("berlin"), any(), any(Pageable.class))).thenReturn(new PageImpl<>(List.of()));
+        when(repository.searchByText(eq(me), eq("Berlin"), any(), any(Pageable.class))).thenReturn(new PageImpl<>(List.of()));
         service.search(me, "100%_\\", "Berlin", 0, 20);
         assertThat(capturedPattern()).isEqualTo("%100\\%\\_\\\\%");
     }
@@ -151,7 +151,7 @@ class DiscoveryServiceTest {
 
     @Test
     void aQueryOfExactlyOneHundredCharactersIsAccepted() {
-        when(repository.searchByText(eq(me), eq("berlin"), any(), any(Pageable.class))).thenReturn(new PageImpl<>(List.of()));
+        when(repository.searchByText(eq(me), eq("Berlin"), any(), any(Pageable.class))).thenReturn(new PageImpl<>(List.of()));
         service.search(me, "x".repeat(100), "Berlin", 0, 20);
     }
 }
