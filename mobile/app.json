@@ -29,7 +29,9 @@
         {
           "cameraPermission": "BookSwap uses the camera to scan a book barcode."
         }
-      ]
+      ],
+      "expo-font",
+      "expo-asset"
     ],
     "scheme": "bookswap",
     "backgroundColor": "#F6EEDD"

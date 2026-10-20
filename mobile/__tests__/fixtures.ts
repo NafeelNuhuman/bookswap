@@ -28,3 +28,22 @@ export const grades: GradeInfo[] = [
 ];
 
 export const apiError = (status: number, code: string, message = code) => ({ status, body: { status, code, message, fieldErrors: [] } });
+
+import type { Item, Party, Proposal } from '../src/api/types';
+
+export const party = (id: string, name: string, over: Partial<Party> = {}): Party => ({ id, displayName: name, city: 'Leeds', ...over });
+
+export const item = (copyId: string, title: string, over: Partial<Item> = {}): Item => ({
+  copyId, isbn: '9780441013593', title, author: 'Someone', coverUrl: `http://x/${copyId}.jpg`, detailsSource: 'CATALOG',
+  gradeAtProposal: 'GOOD', ...over,
+});
+
+export function proposal(over: Partial<Proposal> = {}): Proposal {
+  return {
+    id: 'p1', status: 'PROPOSED', cancelCause: null, parentId: null, message: null, rejectReason: null,
+    createdAt: '2026-10-01T10:00:00Z', expiresAt: '2026-10-15T10:00:00Z', acceptedAt: null, confirmBy: null, completedAt: null,
+    confirmedByMe: null, confirmedByOther: null, pickupNote: null,
+    proposer: party('u2', 'Sam'), recipient: party('me', 'Me'),
+    offered: [item('k1', 'Dune')], requested: [item('m1', 'Mine One')], ...over,
+  };
+}
