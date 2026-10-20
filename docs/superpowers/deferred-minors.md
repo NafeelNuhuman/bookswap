@@ -129,3 +129,26 @@ Minors:
 10. `ConcurrencyIT.housekeepingRacingALateConfirmSettlesOnce` sets the deadline in the past first, so the confirm is always 409; it checks no 500, no deadlock and a single settlement, not interleavings.
 11. `HousekeepingIT.theJobIsScheduled` only proves some scheduled task exists.
 12. The spec names the detail field `confirmDeadline`; the API calls it `confirmBy`.
+
+## Step 6 whole-branch review (fresh fable reviewer): one Critical and two Important fixed, minors deferred
+
+Fixed (each RED then GREEN, mobile suite 123/123):
+- Critical: the app had no `/` route, so Expo Go opened on "Unmatched Route". Added `app/index.tsx` (redirects to `/login` or `/library` by session) and extracted `src/RootNavigator.tsx`; `__tests__/routing.test.tsx` renders the real guards and index with `expo-router/testing-library`.
+- Important: sending a proposal or counter used `router.replace` from the root modal, stacking a second copy of the tabs; now `router.dismissTo` (`composeScreen.test.tsx` expects it).
+- Important: `Screen` is wrapped in `KeyboardAvoidingView behavior="padding"` (edge-to-edge Android does not resize for the keyboard); `screen.test.tsx`. Still to be confirmed on the phone.
+
+Ruling: the Incoming and Outgoing lists keep showing every status (newest first, with a status chip) rather than only `PROPOSED`. A proposer would otherwise never see that their proposal was declined or cancelled. The spec line about a countered original not appearing in Incoming/Outgoing is superseded: it appears with the "Countered" chip. Cost if wrong: the lists are longer than a pure inbox.
+
+Minors:
+
+13. Compose: the tapped book (`wantedCopyId`) is pre-selected but only shown if it is on a loaded shelf page (20 per page); with a long shelf or a stale card the user sees "1 of 5 chosen" with no row to untick.
+14. Discover: the feed returns 400 `LOCATION_REQUIRED` for a user with no city; `errors.ts` has no friendly message and "Try again" cannot help (link to Profile would).
+15. Active section: `isError` is only true when both queries fail, so one failing query shows "No accepted exchanges right now".
+16. A logout during an in-flight token refresh can write tokens back after `clear()`; a request with no stored tokens calls `onSignedOut` again. Needs a session epoch.
+17. `SessionProvider`: if `tokenStore.get()` rejects the status stays `loading` (blank screen).
+18. `BookGrid`: an error loading the next page shows nothing when items are already loaded.
+19. `keyboardType="numbers-and-punctuation"` on the ISBN field is iOS only.
+20. The compose modal title is "Propose a swap" even for a counter-offer.
+21. `package.json` uses `~`/`^` ranges, the spec says exact pins (the lockfile pins).
+22. `useOpenProfileWhenIncomplete` opens Profile on every launch for an incomplete profile, not only right after sign-up.
+23. Not judged (needs the phone): serif font rendering, Alert styling, camera preview inside a ScrollView, the bottom inset under the 3-button navigation bar, and the Tasks 9 and 10 tests were written before the code but their RED run was skipped.

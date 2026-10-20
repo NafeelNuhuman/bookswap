@@ -72,7 +72,7 @@ export default function ComposeScreen() {
       await (counterOf ? counter(api, counterOf, body) : propose(api, body));
       qc.invalidateQueries({ queryKey: ['proposals'] });
       qc.invalidateQueries({ queryKey: ['copies'] });
-      router.replace({ pathname: '/exchanges', params: { section: 'outgoing' } });
+      router.dismissTo({ pathname: '/exchanges', params: { section: 'outgoing' } });
     } catch (e) {
       setError(friendlyMessage(e));
       setBusy(false);

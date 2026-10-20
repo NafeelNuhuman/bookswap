@@ -4,10 +4,10 @@ import ComposeScreen from '../app/compose';
 import { apiError, card, copy, item, page, proposal } from './fixtures';
 import { Wrapper, fakeFetch, memoryTokens, Route } from './testUtils';
 
-const mockReplace = jest.fn();
+const mockDismissTo = jest.fn();
 let mockParams: Record<string, string> = {};
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: jest.fn(), back: jest.fn(), replace: mockReplace }),
+  useRouter: () => ({ push: jest.fn(), back: jest.fn(), replace: jest.fn(), dismissTo: mockDismissTo }),
   useLocalSearchParams: () => mockParams,
 }));
 jest.mock('../src/components/GradePicker', () => ({ GradePicker: () => null }));
@@ -31,7 +31,7 @@ async function renderCompose(route: Route) {
 
 const row = (name: string) => screen.findByRole('checkbox', { name });
 
-beforeEach(() => { mockReplace.mockClear(); mockParams = { recipientId: 'u2', wantedCopyId: 'k1' }; });
+beforeEach(() => { mockDismissTo.mockClear(); mockParams = { recipientId: 'u2', wantedCopyId: 'k1' }; });
 
 describe('compose screen: new proposal', () => {
   it("opens with the tapped book selected and submit disabled until one of mine is ticked", async () => {
@@ -58,7 +58,7 @@ describe('compose screen: new proposal', () => {
     await waitFor(() => expect(f.calls.find((c) => c.method === 'POST')?.body).toEqual({
       requestedCopyIds: ['k1', 'k2'], offeredCopyIds: ['m1'], message: 'Hello there',
     }));
-    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith({ pathname: '/exchanges', params: { section: 'outgoing' } }));
+    await waitFor(() => expect(mockDismissTo).toHaveBeenCalledWith({ pathname: '/exchanges', params: { section: 'outgoing' } }));
   });
 
   it('COPY_NOT_AVAILABLE shows the friendly message and keeps the selection', async () => {
@@ -68,7 +68,7 @@ describe('compose screen: new proposal', () => {
     expect(await screen.findByText('One of the books is no longer available.')).toBeTruthy();
     expect(await row('Mine One')).toBeChecked();
     expect(await row('Dune')).toBeChecked();
-    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockDismissTo).not.toHaveBeenCalled();
   });
 
   it('the message box is limited to 500 characters', async () => {
@@ -93,6 +93,6 @@ describe('compose screen: counter-offer', () => {
     await waitFor(() => expect(f.calls.find((c) => c.path === '/api/proposals/p1/counter')?.body).toEqual({
       requestedCopyIds: ['k1'], offeredCopyIds: ['m1', 'm2'], message: null,
     }));
-    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith({ pathname: '/exchanges', params: { section: 'outgoing' } }));
+    await waitFor(() => expect(mockDismissTo).toHaveBeenCalledWith({ pathname: '/exchanges', params: { section: 'outgoing' } }));
   });
 });
