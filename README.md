@@ -15,6 +15,10 @@ Or everything in containers: `docker compose --profile app up --build`.
 Swagger UI: http://localhost:8080/swagger-ui.html
 Register, log in, click **Authorize**, paste the access token.
 
+## Mobile app
+
+An Expo (React Native) client lives in `mobile/`: library, scan-to-add, discovery, the full exchange flow and profile. Setup and an acceptance checklist are in `mobile/README.md`.
+
 ## Library API
 
 All endpoints need a bearer token. New copies start `UNLISTED`; listing one needs a complete profile.
