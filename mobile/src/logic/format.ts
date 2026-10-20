@@ -1,4 +1,4 @@
-import type { ConditionGrade, CopyStatus } from '../api/types';
+import type { ConditionGrade, CopyStatus, Item, ProposalStatus } from '../api/types';
 
 // Mirror the backend's grade labels (GET /api/condition-grades) so lists need no extra request.
 const GRADES: Record<ConditionGrade, string> = {
@@ -21,4 +21,27 @@ export const statusLabel = (s: CopyStatus): string => STATUSES[s] ?? s;
 export function ownerLine(owner: { displayName: string; city?: string | null }): string {
   const city = owner.city?.trim();
   return city ? `${owner.displayName} · ${city}` : owner.displayName;
+}
+
+const PROPOSAL_STATUSES: Record<ProposalStatus, string> = {
+  PROPOSED: 'Waiting for a reply',
+  ACCEPTED: 'Accepted',
+  REJECTED: 'Declined',
+  COUNTERED: 'Countered',
+  CANCELLED: 'Cancelled',
+  EXPIRED: 'Expired',
+  COMPLETED: 'Completed',
+};
+
+export const proposalStatusLabel = (s: ProposalStatus): string => PROPOSAL_STATUSES[s] ?? s;
+
+/** "Dune", or "Dune + 2 more" when there are several. */
+export function summarizeItems(items: Item[]): string {
+  if (items.length === 0) return '';
+  return items.length === 1 ? items[0].title : `${items[0].title} + ${items.length - 1} more`;
+}
+
+export function formatDate(iso: string | null | undefined): string {
+  if (!iso) return '';
+  return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 }

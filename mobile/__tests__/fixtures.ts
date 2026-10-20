@@ -1,4 +1,4 @@
-import type { Copy, CopyCard, GradeInfo, Page } from '../src/api/types';
+import type { Copy, CopyCard, GradeInfo, Item, Page, Party, Proposal } from '../src/api/types';
 
 export function page<T>(content: T[], p = 0, totalPages = 1): Page<T> {
   return { content, page: p, size: 20, totalElements: content.length, totalPages };
@@ -28,8 +28,6 @@ export const grades: GradeInfo[] = [
 ];
 
 export const apiError = (status: number, code: string, message = code) => ({ status, body: { status, code, message, fieldErrors: [] } });
-
-import type { Item, Party, Proposal } from '../src/api/types';
 
 export const party = (id: string, name: string, over: Partial<Party> = {}): Party => ({ id, displayName: name, city: 'Leeds', ...over });
 
