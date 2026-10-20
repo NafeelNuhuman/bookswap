@@ -24,6 +24,7 @@ const MESSAGES: Record<string, string> = {
   PROPOSAL_ACTION_NOT_ALLOWED: "You can't do that with this proposal.",
   CONCURRENT_UPDATE: 'Something changed while you were doing that. Please try again.',
   EMAIL_TAKEN: 'An account with this email already exists.',
+  INVALID_QUERY: 'Search text must be 1 to 100 characters.',
   INVALID_ISBN: "That isn't a valid ISBN.",
   SELF_PROPOSAL: "You can't swap with yourself.",
   CATALOG_UNAVAILABLE: 'The book catalogue is unavailable right now. Try again, or enter the details yourself.',

@@ -5,6 +5,7 @@ export default function DiscoverLayout() {
   return (
     <Stack screenOptions={stackOptions}>
       <Stack.Screen name="index" options={{ title: 'Discover' }} />
+      <Stack.Screen name="book" options={{ title: 'Book' }} />
     </Stack>
   );
 }
