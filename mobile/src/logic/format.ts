@@ -45,3 +45,10 @@ export function formatDate(iso: string | null | undefined): string {
   if (!iso) return '';
   return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 }
+
+/** The label to show now: a lapsed proposal reads as expired and an accepted one past its deadline as settling. */
+export function effectiveStatusLabel(p: { status: ProposalStatus; expiresAt: string; confirmBy: string | null }, now: Date): string {
+  if (p.status === 'PROPOSED' && Date.parse(p.expiresAt) <= now.getTime()) return 'Expired';
+  if (p.status === 'ACCEPTED' && p.confirmBy && Date.parse(p.confirmBy) <= now.getTime()) return 'Settling soon';
+  return proposalStatusLabel(p.status);
+}

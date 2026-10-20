@@ -17,3 +17,14 @@ export const listProposals = (api: ApiClient, opts: { role: Role; status?: Propo
 
 export const listExchanges = (api: ApiClient, page: number) =>
   api.request<Page<Exchange>>('GET', '/api/exchanges', { query: { page, size: 20 } });
+
+const act = (api: ApiClient, id: string, action: string, body?: unknown) =>
+  api.request<Proposal>('POST', `/api/proposals/${id}/${action}`, { body });
+
+export const accept = (api: ApiClient, id: string) => act(api, id, 'accept');
+export const reject = (api: ApiClient, id: string, reason?: string) => act(api, id, 'reject', reason ? { reason } : undefined);
+export const cancel = (api: ApiClient, id: string) => act(api, id, 'cancel');
+export const confirm = (api: ApiClient, id: string) => act(api, id, 'confirm');
+
+export const setPickupNote = (api: ApiClient, id: string, note: string) =>
+  api.request<Proposal>('PUT', `/api/proposals/${id}/pickup-note`, { body: { note } });
