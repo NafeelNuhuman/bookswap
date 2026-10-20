@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
+import { useOpenProfileWhenIncomplete } from '../../src/logic/useOpenProfileWhenIncomplete';
 import { theme } from '../../src/theme';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -14,6 +15,7 @@ function tab(name: string, title: string, icon: IconName) {
 }
 
 export default function TabsLayout() {
+  useOpenProfileWhenIncomplete();
   return (
     <Tabs
       screenOptions={{
