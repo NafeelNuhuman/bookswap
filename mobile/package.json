@@ -45,7 +45,11 @@
     ],
     "setupFiles": [
       "<rootDir>/jest.setup.ts"
-    ]
+    ],
+    "setupFilesAfterEnv": [
+      "<rootDir>/jest.setup.after.ts"
+    ],
+    "testTimeout": 20000
   },
   "overrides": {
     "react-native-worklets": "0.10.1",

@@ -53,7 +53,7 @@ describe('adding a book', () => {
     expect(await screen.findByText('Dune')).toBeTruthy();
     expect(screen.getByText('Frank Herbert')).toBeTruthy();
     expect(f.calls.find((c) => c.path.startsWith('/api/books/lookup'))?.path).toContain('isbn=9780441013593');
-    await fireEvent.press(screen.getByRole('button', { name: 'Poor' }));
+    await fireEvent.press(await screen.findByRole('button', { name: 'Poor' }));
     await fireEvent.press(screen.getByRole('button', { name: 'Add to my library' }));
     await waitFor(() => expect(f.calls.find((c) => c.method === 'POST')?.body).toEqual({ isbn: '9780441013593', grade: 'POOR' }));
     await waitFor(() => expect(mockBack).toHaveBeenCalled());
