@@ -1,6 +1,6 @@
 import React from 'react';
 import { Text } from 'react-native';
-import { Stack, Tabs } from 'expo-router';
+import { Stack, Tabs, usePathname } from 'expo-router';
 import { renderRouter, screen } from 'expo-router/testing-library';
 import Index from '../app/index';
 import { RootNavigator } from '../src/RootNavigator';
@@ -29,7 +29,7 @@ const routes = {
   '(auth)/register': stub('REGISTER'),
   '(tabs)/_layout': tabsLayout,
   '(tabs)/library/_layout': stackLayout,
-  '(tabs)/library/index': stub('LIBRARY'),
+  '(tabs)/library/index': () => <Text>LIBRARY {usePathname()}</Text>,
   '(tabs)/discover/_layout': stackLayout,
   '(tabs)/discover/index': stub('DISCOVER'),
   '(tabs)/exchanges/_layout': stackLayout,
@@ -47,8 +47,7 @@ describe('launch routing', () => {
 
   it('a signed-in launch at / lands on the library', async () => {
     mockStatus = 'signedIn';
-    const r = await renderRouter(routes, { initialUrl: '/' });
-    expect(await screen.findByText('LIBRARY')).toBeTruthy();
-    expect(r.getPathname()).toBe('/library');
+    await renderRouter(routes, { initialUrl: '/' });
+    expect(await screen.findByText('LIBRARY /library')).toBeTruthy();
   });
 });
